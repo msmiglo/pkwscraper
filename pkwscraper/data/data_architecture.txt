@@ -1,0 +1,50 @@
+województwa:
+id, code, name, geo
+
+powiaty:
+id, code, name, geo, parent
+
+gminy:
+id, code, name, geo, parent
+
+okrêgi:
+id, number, headquarters, voivodship, powiat_list, mandates, geo
+
+obwody:
+id, number, name, full_adress, gmina, okreg, senat_okreg_number, urban_or_rural, voters
+
+listy:
+id, number, commitee_name, commitee_symbol, commitee_type, commitee_shortname
+
+kandydaci:
+id, okreg, list, position, surname, names, gender, ressidence, occupancy, party
+
+frekwencja:
+id, obwod, 
+
+Liczba wyborców
+Otrzymane karty
+Niewykorzystane karty
+Wydane karty
+Liczba wyborców g³osuj¹cych przez pe³nomocnika
+Liczba wyborców g³osuj¹cych na podstawie zaœwiadczenia
+Pakiety wyborcze
+Koperty zwrotne
+Koperty  bez oœwiadczenia
+Niepodpisane oœwiadczenie
+Koperty zwrotne bez koperty na kartê do g³osowania
+Niezaklejona koperta na kartê do g³osowania
+Koperty na kartê do g³osowania wrzucone do urny
+Karty wyjête z urny
+Karty wyjête z kopert na karty do g³osowania
+Karty niewa¿ne
+Karty wa¿ne
+G³osy niewa¿ne
+w tym: z powodu postawienia znaku „X” obok nazwiska dwóch lub wiêkszej liczby kandydatów z ró¿nych list
+w tym: z powodu niepostawienia znaku „X” obok nazwiska ¿adnego kandydata
+w tym: z powodu postawienia znaku „x” wy³¹cznie obok nazwiska kandydata z listy, której rejestracja zosta³a uniewa¿niona
+G³osy wa¿ne
+
+
+wyniki:
+id, obwod, kandydat, liczba g³osów

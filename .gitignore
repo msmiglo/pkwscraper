@@ -1,5 +1,8 @@
 # private files and data
-
+/research/*
+/pkwscraper/data/*/*.xls
+/pkwscraper/data/*/*.xlsx
+/pkwscraper/data/*/*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
