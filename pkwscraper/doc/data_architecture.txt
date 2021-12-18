@@ -1,25 +1,25 @@
-województwa:
+województwa (voivodships):
 id, code, name, geo
 
-powiaty:
+powiaty (districts):
 id, code, name, geo, parent
 
-gminy:
+gminy (communes):
 id, code, name, geo, parent
 
-okrêgi:
+okrêgi wyborcze (constituencies):
 id, number, headquarters, voivodship, powiat_list, mandates, geo
 
-obwody:
-id, number, name, full_adress, gmina, okreg, senat_okreg_number, urban_or_rural, voters
+obwody (polling districts):
+id, number, name, full_adress, gmina, constituency, senate_constituency_number, urban_or_rural, voters
 
-listy:
-id, number, commitee_name, commitee_symbol, commitee_type, commitee_shortname
+komitety (committees):
+id, number, committee_name, committee_symbol, committee_type, committee_shortname
 
-kandydaci:
-id, okreg, list, position, surname, names, gender, ressidence, occupancy, party
+kandydaci (candidates):
+id, constituency, list, position, surname, names, gender, residence, occupation, party
 
-frekwencja:
+protoko³y:
 id, obwod, 
 
 Liczba wyborców
@@ -46,5 +46,8 @@ w tym: z powodu postawienia znaku „x” wy³¹cznie obok nazwiska kandydata z listy,
 G³osy wa¿ne
 
 
-wyniki:
-id, obwod, kandydat, liczba g³osów
+wyniki g³osowania (voting results):
+id, obwod, candidate, votes
+
+mandaty (mandates):
+id, candidate
