@@ -2,6 +2,8 @@
 import os
 from unittest import main, skip, TestCase
 
+from pandas import DataFrame, Series
+
 from pkwscraper.lib.dbdriver import DbDriver, Table
 
 
@@ -11,7 +13,7 @@ class TestTable(TestCase):
     - test put
     - test get
     - test find
-    - test find many
+    - test find multiple criteria
     - test find one
     - test find one with fields
     - test find with fields
@@ -22,7 +24,7 @@ class TestTable(TestCase):
         id_1 = self.table.put({"char": "a", "num": 1, "num2": 10})
         id_2 = self.table.put({"char": "a", "num": 2, "num2": 11, "_id": "aid"})
         id_3 = self.table.put({"char": "b", "num": 3, "num2": 10}, _id="kid")
-        id_4 = self.table.put({"char": "b", "num": 3, "val": 10})
+        id_4 = self.table.put({"char": "b", "num": 3, "val": 20})
         self.ids = (id_1, id_2, id_3, id_4)
 
     def tearDown(self):
@@ -120,7 +122,7 @@ class TestTable(TestCase):
         self.assertEqual(len(res_3), 4)
         self.assertSetEqual(set(res_3), set(self.ids))
 
-    def test_table_find_many(self):
+    def test_table_find_multiple_criteria(self):
         t = self.table
         id_1, id_2, id_3, id_4 = self.ids
 
@@ -133,119 +135,133 @@ class TestTable(TestCase):
         res_2 = t.find({"num": 3, "char": "b"})
         self.assertSetEqual(set(res_2), {id_3, id_4})
         self.assertDictEqual(res_2, {
-            id_4: {"char": "b", "num": 3, "val": 10},
+            id_4: {"char": "b", "num": 3, "val": 20},
             "kid": {"char": "b", "num": 3, "num2": 10},
         })
 
-
-
-
-
-
-
-
-
-
-
-    #@skip
     def test_table_find_one(self):
         t = self.table
         id_1, id_2, id_3, id_4 = self.ids
-        print(t._Table__data)
 
-        print()
-        print(id_2)
-        print(t.find_one({"num": 2}))
+        _id, rec = t.find_one({"num": 2})
+        self.assertIn(_id, [id_2])
+        self.assertDictEqual(rec, {"char": "a", "num": 2, "num2": 11})
 
-        print()
-        print(id_1)
-        print(t.find_one({"num2": 10}))
+        _id, rec = t.find_one({"num2": 10})
+        self.assertIn(_id, [id_1, id_3])
+        self.assertEqual(rec["num2"], 10)
 
-        print()
-        print(t.find_one({"num2": 667}))
-        assert t.find_one({"num2": 667}) is None
+        res = t.find_one({"num2": 667})
+        self.assertIsNone(res)
 
-        print()
-        print(t.find_one({"xyz": 3}))
-        assert t.find_one({"xyz": 3}) is None
+        res = t.find_one({"xyz": 3})
+        self.assertIsNone(res)
+
+        res = t.find_one({"num": 3, "char": "a"})
+        self.assertIsNone(res)
+
+        _id, rec = t.find_one({"num": 3, "num2": 10})
+        self.assertIn(_id, [id_3])
+        self.assertDictEqual(rec, {"char": "b", "num": 3, "num2": 10})
 
         _id, rec = t.find_one({})
-        assert isinstance(_id, str)
-        assert isinstance(rec, dict)
-        print()
-        print(id_1)
-        print(_id, rec)
-        
-        print()
-        print(id_3)
-        print(t.find_one({"num": 3, "num2": 10}))
+        self.assertIsInstance(_id, str)
+        self.assertIsInstance(rec, dict)
+        self.assertIn(_id, self.ids)
 
-        print()
-        print(id_3)
-        _id, rec = t.find_one({"num": 3, "char": "b"})
-        assert isinstance(_id, str)
-        assert isinstance(rec, dict)
-        print(_id, rec)
+    def test_find_one_with_fields(self):
+        t = self.table
+        id_1, id_2, id_3, id_4 = self.ids
+
+        res = t.find_one({}, "_id")
+        self.assertIn(res, self.ids)
+
+        res = t.find_one({}, ["_id"])
+        self.assertIsInstance(res, list)
+        self.assertEqual(len(res), 1)
+        self.assertIn(res[0], self.ids)
+
+        res = t.find_one({}, ["val", "_id"])
+        self.assertIsInstance(res, list)
+        self.assertEqual(len(res), 2)
+        self.assertTrue(
+            res == [None, id_1]
+            or res == [None, id_2]
+            or res == [None, id_3]
+            or res == [20, id_4]
+        )
+
+        res = t.find_one({}, "val")
+        self.assertIn(res, [None, 20])
+
+        res = t.find_one({"num2": 11}, "_id")
+        self.assertEqual(res, id_2)
+
+        res = t.find_one({"num2": 11}, ["_id"])
+        self.assertListEqual(res, [id_2])
+
+        res = t.find_one({"num2": 11}, ["val", "_id"])
+        self.assertListEqual(res, [None, id_2])
+
+        res = t.find_one({"num2": 11}, "val")
+        self.assertEqual(res, None)
+
+    def test_find_with_fields(self):
+        t = self.table
+        id_1, id_2, id_3, id_4 = self.ids
+
+        # choose all records
+        res = t.find({}, "_id")
+        self.assertListEqual(res, list(self.ids))
+
+        res = t.find({}, ["_id"])
+        self.assertIsInstance(res, list)
+        self.assertEqual(len(res), 4)
+        self.assertListEqual(res, [[id_1], [id_2], [id_3], [id_4]])
+
+        res = t.find({}, ["num2", "_id"])
+        self.assertListEqual(
+            res, [[10, id_1], [11, id_2], [10, id_3], [None, id_4]])
+
+        res = t.find({}, "num2")
+        self.assertListEqual(res, [10, 11, 10, None])
+
+        res = t.find({}, [])
+        self.assertListEqual(res, [[], [], [], []])
+
+        # find record by criteria
+        res = t.find({"num2": 11}, "_id")
+        self.assertListEqual(res, [id_2])
+
+        res = t.find({"num2": 11}, ["_id"])
+        self.assertListEqual(res, [[id_2]])
+
+        res = t.find({"num2": 11}, ["num2", "_id"])
+        self.assertListEqual(res, [[11, id_2]])
+
+        res = t.find({"num2": 11}, "num2")
+        self.assertListEqual(res, [11])
+
+        res = t.find({"num2": 11}, [])
+        self.assertListEqual(res, [[]])
+
 
     '''
     id_1 = self.table.put({"char": "a", "num": 1, "num2": 10})
     id_2 = self.table.put({"char": "a", "num": 2, "num2": 11, "_id": "aid"})
     id_3 = self.table.put({"char": "b", "num": 3, "num2": 10}, _id="kid")
-    id_4 = self.table.put({"char": "b", "num": 3, "val": 10})
+    id_4 = self.table.put({"char": "b", "num": 3, "val": 20})
     '''
 
-    #@skip
-    def test_find_one_with_fields(self):
-        t = self.table
-        id_1, id_2, id_3, id_4 = self.ids
-        print(t._Table__data)
-
-        print()
-        print(t.find_one({}))
-        print(t.find_one({}, "_id"))
-        print(t.find_one({}, ["_id"]))
-        print(t.find_one({}, ["val", "_id"]))
-        print(t.find_one({}, "val"))
-
-        print()
-        print(t.find_one({"num2": 11}))
-        print(t.find_one({"num2": 11}, "_id"))
-        print(t.find_one({"num2": 11}, ["_id"]))
-        print(t.find_one({"num2": 11}, ["val", "_id"]))
-        print(t.find_one({"num2": 11}, "val"))
-
-    #@skip
-    def test_find_with_fields(self):
-        t = self.table
-        id_1, id_2, id_3, id_4 = self.ids
-        print(t._Table__data)
-
-        print()
-        print(t.find({}))
-        print(t.find({}, "_id"))
-        print(t.find({}, ["_id"]))
-        print(t.find({}, ["num2", "_id"]))
-        print(t.find({}, "num2"))
-
-        print()
-        print(t.find({"num2": 11}))
-        print(t.find({"num2": 11}, "_id"))
-        print(t.find({"num2": 11}, ["_id"]))
-        print(t.find({"num2": 11}, ["num2", "_id"]))
-        print(t.find({"num2": 11}, "num2"))
-
-    #@skip
     def test_table_to_df(self):
         t = self.table
-        id_1, id_2, id_3, id_4 = self.ids
-        print()
-        print(t._Table__data)
         df = t.to_df()
-        print(df)
+        self.assertIsInstance(df, DataFrame)
+        self.assertIsInstance(df.loc["kid"], Series)
+        self.assertEqual(df.loc["kid"]["num2"], 10)
         t2 = Table.from_df(df)
-        print()
-        print(t2._Table__data)
-        assert t._Table__data == t2._Table__data
+        self.assertEqual(len(t2._Table__data), 4)
+        self.assertDictEqual(t._Table__data, t2._Table__data)
 
 
 
