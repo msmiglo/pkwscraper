@@ -245,14 +245,6 @@ class TestTable(TestCase):
         res = t.find({"num2": 11}, [])
         self.assertListEqual(res, [[]])
 
-
-    '''
-    id_1 = self.table.put({"char": "a", "num": 1, "num2": 10})
-    id_2 = self.table.put({"char": "a", "num": 2, "num2": 11, "_id": "aid"})
-    id_3 = self.table.put({"char": "b", "num": 3, "num2": 10}, _id="kid")
-    id_4 = self.table.put({"char": "b", "num": 3, "val": 20})
-    '''
-
     def test_table_to_df(self):
         t = self.table
         df = t.to_df()

@@ -9,6 +9,62 @@ EXTENSIONS = ['csv', 'xls', 'xlsx']
 
 
 class Table:
+    """
+    `Table` can be loaded as read only - the modifying and
+    deleting operations cannot be performed.
+
+    Records can be read directly by record ID (if known). Then it
+    needs to use square brackets to choose proper record.
+
+    Searching a `Table` is done by `find` method - it can
+    be called with criterions for fields with syntax:
+
+    `find(query={"field_name_1": value_1, field_name_2: value_2})`
+
+    This will return all records which have the given fields with
+    given values.
+
+    The returned value will be dict of records with its ID as key.
+    Records are represented as "documents" which are dictionaries
+    of `name: value` pairs. Names of fields in records are not
+    restricted, except "_id" field, which is the record ID.
+
+    The `find_one` method can be used to return just one result
+    (first found). It takes the same kind of query. It returns the
+    id of record, and the record itself (so the tuple is returned).
+    If there aren't any record matching the query, the `None` is
+    returned.
+    NOTE: just a single None object will be returned, not a tuple.
+
+    If the `fields` parameter is given - the returned value of `find`
+    and `find_one` methods is list of results. Each result represent
+    a single record that mathces the `query`. If `fields` parameter is
+    just a single key name - each result will be just the key value,
+    therefore a method will return list of values.
+
+    If `fields` parameter is a list of keys (or column names) - a
+    single result will be a list of the keys values from a record
+    with order matching the order of `fields` parameter. Missing keys
+    will also be included, containing `None` values. Therefore the
+    method in such case will return list of lists of values.
+
+    Writing records to `Table` can be done via `put` method. It takes
+    the ID of new record and dict with name: value pairs. If the ID
+    is not provided - a UUID is generated. If the provided ID
+    duplicates an existing one - it will be overwritten. It can be
+    used for modifying records also. The `__force` parameter can be
+    used to write records to "read_only" Table, but still it will be
+    impossible to save the changes to hadrdrive.
+
+    Deleting or modifying records must be done manually. It is not
+    supported as it is not needed for this project.
+
+    `Table` can be converted to `pandas.DataFrame` without loss of data
+    and vice versa - it can be loaded from `pandas.DataFrame`, but
+    this time it is not guaranteed to support all strange features
+    of `DataFrame`. Shortly said - `Table` can be converted to DF and
+    back and they will stay the same.
+    """
     HEX_DIGITS = list('0123456789abcdef')
     UUID_PARTS = (8, 4, 4, 4, 12)
     def __init__(self, read_only=False):
@@ -117,6 +173,26 @@ class Table:
 
 class DbDriver:
     """
+    `DbDriver` operates on harddrive directories. One directory can be
+    treated as one DB. Directory contains `Tables` represented by `csv` files.
+
+    `DbDriver` loads or creates a DB on harddrive. DBs opened with "read_only"
+    parameter set to `True`, will only allow to read data. `Tables` however can be
+    modified by `put` method with `__force` parameter, but the changes cannot
+    be saved to harddrive anyway.
+
+    `Tables` can be accessed by square brackets by its name.
+
+    DB can have `Table` added or deleted by `create_table` and `delete_table`
+    methods, respectively.
+
+    The `load_tables` method allows to load DB from harddrive, which is done in
+    constructor anyway.
+
+    The `dump_tables` method will save changes to harddrive.
+    NOTE: when ending work with DbDriver, the changes will not be saved
+    automatically. Each time the work needs to be saved - the `dump_tables`
+    method must be called.
     - init
     - delete db
     - delete table
@@ -223,10 +299,15 @@ class DbDriver:
             self.__tables[name] = table
 
     def dump_tables(self):
+        """
+        Delete from harddrive the `csv` files corresponding to
+        deleted `Tables`. Overwrite other `Tables`.
+        """
         # TODO - test it
         if self.__read_only:
             raise IOError("DB is for reading only.")
         for deleted_name in self.__dropped_tables:
+            # TODO - reset state (ie empty the dropped tables list)
             filepath = self._filepath(deleted_name)
             if os.path.exists(filepath):
                 os.remove(filepath)
