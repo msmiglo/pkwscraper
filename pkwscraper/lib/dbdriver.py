@@ -81,13 +81,16 @@ class Table:
 
         returns: Table
         """
+        # create new table
         table = cls(read_only=read_only)
+        # iterate over records
         i = 0
         for _id, record_ser in df.iterrows():
             if limit and i >= limit:
                 break
             i += 1
             record = dict(record_ser.dropna())
+            # add the record to table
             table.put(record, _id=_id, _Table__force=True)
         return table
 
@@ -95,14 +98,17 @@ class Table:
         """
         returns: pandas.DataFrame
         """
+        # check read only
         if self.__read_only:
             raise IOError("Table is for read only.")
+        # make data frame
         df = pd.DataFrame(self.__data).T
         df.index.name = "_id"
         return df
 
     @staticmethod
     def _hex_string(k):
+        """ Returns k-length hex-digit string. """
         sample = random.choices(Table.HEX_DIGITS, k=k)
         return "".join(sample)
 
@@ -118,12 +124,20 @@ class Table:
 
         returns: Table
         """
+        # check read only
         if self.__read_only and not __force:
             raise IOError("Table is for read only.")
+        # copy dict
         record = dict(record)
-        if _id is not None:
-            record["_id"] = _id
-        _id = record.pop("_id", self._make_uuid())
+
+        # get record id and remove it from record
+        record_id = record.pop("_id", None)
+        if _id is None:
+            _id = record_id
+        if _id is None:
+            _id = self._make_uuid()
+
+        # add record to data
         self.__data[_id] = record
         return _id
 
@@ -137,8 +151,10 @@ class Table:
         return record.get(field)
 
     def _find(self, query):
+        # return all if no criterions
         if len(query) == 0:
             return dict(self.__data)
+        # copy matching results and return
         result = {}
         for _id, record in self.__data.items():
             if all(key in record and record[key] == value
@@ -154,12 +170,16 @@ class Table:
 
         returns: dict/list
         """
+        # get raw results
         results = self._find(query)
+        # return raw results if fields not given
         if fields is None:
             return results
+        # chose one value from each record
         if isinstance(fields, str):
             return [self._get_id_or_field(_id, record, fields)
                     for _id, record in results.items()]
+        # chose only values matching given fields
         if isinstance(fields, list):
             return [[self._get_id_or_field(_id, record, field)
                     for field in fields]
@@ -181,14 +201,20 @@ class Table:
 
         returns: dict/value/None
         """
+        # get raw result
         one = self._find_one(query)
+        # if no result found
         if one is None:
             return None
+        # unpack the result
         _id, record = one
+        # if fields not given - return raw result
         if fields is None:
             return _id, record
+        # chose one value
         if isinstance(fields, str):
             return self._get_id_or_field(_id, record, fields)
+        # chose only values matching given fields
         if isinstance(fields, list):
             return [self._get_id_or_field(_id, record, field)
                     for field in fields]
@@ -219,16 +245,6 @@ class DbDriver:
     NOTE: when ending work with DbDriver, the changes will not be
     saved automatically. Each time the work needs to be saved - the
     `dump_tables` method must be called.
-
-
-    - init
-    - delete db
-    - delete table
-    - make table
-    - load tables - make private maybe
-    - dump_tables - delete not present tables maybe or register which to delete
-
-
     """
     def __init__(self, db_directory, limit=None, read_only=False):
         """
@@ -236,6 +252,7 @@ class DbDriver:
         limit: int/None - max numbers of records to be loaded in one table
         read_only: bool - whether to protect DB from changes
         """
+        # initialize attributes
         self.delete_access_code = None
         self.limit = limit
         self.__read_only = read_only
@@ -246,9 +263,12 @@ class DbDriver:
         # stored on harddrive
         self.db_directory = db_directory
         self.__tables = {}
+
         if os.path.exists(db_directory):
+            # load existing directory
             self._load_tables()
         else:
+            # create new directory if not read_only
             if self.__read_only:
                 raise IOError("DB for read does not exist.")
             os.makedirs(db_directory, exist_ok=True)
@@ -264,8 +284,10 @@ class DbDriver:
     @staticmethod
     def _load_csv(filepath):
         try:
+            # if there is index column in csv file
             table_df = pd.read_csv(filepath, sep=";", index_col="_id")
         except ValueError:
+            # if the index column is not present in csv file
             table_df = pd.read_csv(filepath, sep=";")
             table_df.index.name = "_id"
         return table_df
@@ -319,13 +341,17 @@ class DbDriver:
         Delete from harddrive the `csv` files corresponding to
         deleted `Tables` and overwrite other `Tables`.
         """
+        # check read only
         if self.__read_only:
             raise IOError("DB is for reading only.")
+        # remove files for deleted tables
         for deleted_name in self.__dropped_tables:
             filepath = self._filepath(deleted_name)
             if os.path.exists(filepath):
                 os.remove(filepath)
+        # reset the state of dbdriver
         self.__dropped_tables.clear()
+        # overwrite existing tables
         for name, table in self.__tables.items():
             filepath = self._filepath(name)
             table.to_df().to_csv(filepath, sep=";")
@@ -335,10 +361,13 @@ class DbDriver:
         Creates new table with given name, or overwrites the existing
         one with empty table.
         """
+        # check read only
         if self.__read_only:
             raise IOError("DB is for reading only.")
+        # add new table to data
         table = Table()
         self.__tables[name] = table
+        # if table previously removed - unmark it
         if name in self.__dropped_tables:
             self.__dropped_tables.remove(name)
 
@@ -347,9 +376,12 @@ class DbDriver:
         Deletes table from DB by given name. It does not take effect
         on harddrive directory until `dump_tables` is called.
         """
+        # check read only
         if self.__read_only:
             raise IOError("DB is for reading only.")
+        # delete table
         self.__tables.pop(name)
+        # add table name as deleted
         self.__dropped_tables.append(name)
 
     def get_deleting_access(self):
@@ -358,13 +390,16 @@ class DbDriver:
         It returns the special code, which needs to be passed to
         the `delete` method.
         """
+        # check read only
         if self.__read_only:
             raise IOError("DB is for reading only.")
+        # create access code
         characters_list = ("1234567890`~!@#$%^&*()_+=-[]\;',./"
                            "{}|:\"<>?QWERTYUIOPLKJHGFDSAZXCVBNM")
         access_code = random.choices(population=characters_list, k=10)
         access_code = "".join(access_code)
         self.deleting_access_code = access_code
+        # return the access code with message
         return f"The delete access code [characters 43-53]: {access_code}"
 
     def delete(self, access_code):
@@ -375,11 +410,14 @@ class DbDriver:
         the directories on harddrive needs confirmation, because it
         cannot be undone.
         """
+        # check read only
         if self.__read_only:
             raise IOError("DB is for reading only.")
+        # check if access granted
         if self.deleting_access_code is None:
             raise RuntimeError(
                 "Access for deleting not granted. Call `get_deleting_access` first.")
+        # check access code and remove first-level files and directory
         if access_code == self.deleting_access_code:
             for name in self.__tables:
                 filepath = self._filepath(name)
