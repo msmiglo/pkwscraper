@@ -75,7 +75,7 @@ class Table:
     def from_df(cls, df, limit=None, read_only=False):
         table = cls(read_only=read_only)
         try:
-            print(df.columns[0])
+            print(df.columns[0])  # TODO - WHAT IS THIS FOR ?   PROBABLY REMOVE
         except IndexError:
             print(df)
         i = 0
@@ -208,7 +208,10 @@ class DbDriver:
         self.limit = limit
         self.__read_only = read_only
         self.__dropped_tables = []
-        
+
+        # TODO - consider adding option "local"/None or something
+        # that will indicate the DB is only in runtime memory, not
+        # stored on harddrive
         self.db_directory = db_directory
         self.__tables = {}
         if os.path.exists(db_directory):
@@ -227,7 +230,7 @@ class DbDriver:
         print('entered deleting')
         if access_code is None or self.__read_only:
             return
-        if access_code == self.delete_access_code:
+        if access_code == self.deleting_access_code:
             # REMOVE TO THE FIRST LEVEL
             for name in self.__tables:
                 filepath = self._filepath(name)
@@ -254,7 +257,7 @@ class DbDriver:
 
     @staticmethod
     def _load_excel(filepath):
-        # MAKE TESTS
+        """ DEPRECATED """
         book = xlrd.open_workbook(filepath)
         sheet = book.sheets()[0]
         n_rows = sheet.nrows
@@ -301,7 +304,7 @@ class DbDriver:
     def dump_tables(self):
         """
         Delete from harddrive the `csv` files corresponding to
-        deleted `Tables`. Overwrite other `Tables`.
+        deleted `Tables` and overwrite other `Tables`.
         """
         # TODO - test it
         if self.__read_only:
@@ -331,12 +334,12 @@ class DbDriver:
         self.__tables.pop(name)
         self.__dropped_tables.append(name)
 
-    def access_delete(self):
+    def get_deleting_access(self):
         if self.__read_only:
             raise IOError("DB is for reading only.")
         characters_list = ("1234567890`~!@#$%^&*()_+=-[]\;',./"
                            "{}|:\"<>?QWERTYUIOPLKJHGFDSAZXCVBNM")
         access_code = random.choices(population=characters_list, k=10)
         access_code = "".join(access_code)
-        self.delete_access_code = access_code
+        self.deleting_access_code = access_code
         return f"The delete access code [characters 43-53]: {access_code}"

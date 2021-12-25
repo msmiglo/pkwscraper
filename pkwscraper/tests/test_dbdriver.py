@@ -1,6 +1,7 @@
 
 import os
 from unittest import main, skip, TestCase
+from unittest.mock import call, MagicMock, patch
 
 from pandas import DataFrame, Series
 
@@ -256,171 +257,352 @@ class TestTable(TestCase):
         self.assertDictEqual(t._Table__data, t2._Table__data)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-@skip
 class TestDbDriver(TestCase):
     """
-    - test not deleting
-    - test db driver
-    - test load ids
-    - test read only
-    - test existing db
+    This is more like integration test, as it is mainly the interface
+    for underlying pandas library and file system communication.
+
+    - test get item
+    - test filepath
+    - test create table
+    - test delete table
+    - test load tables
+    - test dump tables
+
+    - test init not exists
+    - test init exists
+    - test read only errors
+    - test load csv
+    - test load excel (rejected)
+    - test delete
+    - test whole
     """
+
+
+    # ===== SETUP METHODS =====
+
     def setUp(self):
-        pass
+        # set up example data
+        self.directory = "./_DB_unittesting_temp_dir_1410_1945/"
+        self.csv_content_1 = """_id;num;char\n101;9;a\n102;16;b\n103;25;c"""
+        self.csv_content_2 = """num;char\n36;d\n49;e\n64;f"""
+        self.path_1 = os.path.join(self.directory, "first_table.csv")
+        self.path_2 = os.path.join(self.directory, "second_table.csv")
+
+        # check if there is directory left from previous tests
+        if os.path.exists(self.directory):
+            raise RuntimeError("Cannot operate on testing directory on harddrive.")
 
     def tearDown(self):
+        # check if the testing directory was cleared by test
+        if os.path.exists(self.directory):
+            # remove the testing trash
+            files = os.listdir(self.directory)
+            if any(not fname.endswith(".csv") for fname in files):
+                # unexpected files found, stop cleaning for safety measures
+                raise RuntimeError("Testing directory had unexpected content.")
+            filepaths = [os.path.join(self.directory, fname) for fname in files]
+            [os.remove(filepath) for filepath in filepaths]
+            os.rmdir(self.directory)
+            # raise an error when cleaned
+            raise RuntimeError("Testing directory was not cleared by test!")
+
+    def _make_synthetic_data(self):
+        os.makedirs(self.directory)
+        with open(self.path_1, 'w') as f:
+            f.write(self.csv_content_1)
+        with open(self.path_2, 'w') as f:
+            f.write(self.csv_content_2)
+
+    def _clean_synthetic_data(self):
+        os.remove(self.path_1)
+        os.remove(self.path_2)
+        os.rmdir(self.directory)
+
+
+    # ===== UNIT TESTS =====
+
+    def test_get_item(self):
+        """ Unit test """
+        dbdriver = DbDriver.__new__(DbDriver) # MagicMock(DbDriver)
+        table = MagicMock()
+        dbdriver._DbDriver__tables = {"MyTable": table}
+
+        with self.assertRaises(KeyError):
+            dbdriver["NotExistingTable"]
+        result = dbdriver["MyTable"]
+        self.assertIs(result, table)
+
+    def test_filepath(self):
+        """ Unit test """
+        # arrange
+        dbdriver = MagicMock()
+        dbdriver.db_directory = "./some_directory"
+        name = "table_name"
+        expected = ["./some_directory\\table_name.csv",
+                    "./some_directory/table_name.csv"]
+        # act
+        result = DbDriver._filepath(dbdriver, name)
+        # assert
+        self.assertIn(result, expected)
+
+    def test_create_table(self):
+        """ Unit test """
+        # arrange
+        new_table_name = "labada"
+        MockTableClass = MagicMock()
+        mock_table = MagicMock()
+        MockTableClass.return_value = mock_table
+
+        mock_db = MagicMock()
+        mock_db._DbDriver__read_only = False
+        mock_db._DbDriver__tables = {}
+        mock_db._DbDriver__dropped_tables = [new_table_name, "other"]
+
+        # act
+        with patch("pkwscraper.lib.dbdriver.Table", MockTableClass):
+            DbDriver.create_table(mock_db, new_table_name)
+
+        # assert
+        self.assertDictEqual(mock_db._DbDriver__tables, {new_table_name: mock_table})
+        self.assertListEqual(mock_db._DbDriver__dropped_tables, ["other"])
+
+    def test_delete_table(self):
+        """ Unit test """
+        # arrange
+        table_name = "labada"
+        mock_table = MagicMock()
+        mock_table_2 = MagicMock()
+
+        mock_db = MagicMock()
+        mock_db._DbDriver__read_only = False
+        mock_db._DbDriver__tables = {table_name: mock_table, "other": mock_table_2}
+        mock_db._DbDriver__dropped_tables = []
+
+        # act
+        DbDriver.delete_table(mock_db, table_name)
+
+        # assert
+        self.assertDictEqual(mock_db._DbDriver__tables, {"other": mock_table_2})
+        self.assertListEqual(mock_db._DbDriver__dropped_tables, [table_name])
+
+    def test_load_tables(self):
+        """ Unit test """
+        # arrange
+        table_filenames = ["labada.csv", "macarena.csv"]
+        mock_os_listdir = MagicMock()
+        mock_os_listdir.return_value = table_filenames
+
+        mock_db = MagicMock()
+        mock_db.db_directory = self.directory
+        mock_df = MagicMock()
+        mock_df_2 = MagicMock()
+        mock_db._load_csv.side_effect = [mock_df, mock_df_2]
+
+        mock_db.limit = None
+        mock_db._DbDriver__read_only = True
+        mock_db._DbDriver__tables = {}
+
+        mock_table = MagicMock()
+        mock_table_2 = MagicMock()
+        MockTableClass = MagicMock()
+        MockTableClass.from_df.side_effect = [mock_table, mock_table_2]
+
+        # act
+        with patch("pkwscraper.lib.dbdriver.Table", MockTableClass):
+            with patch("pkwscraper.lib.dbdriver.os.listdir", mock_os_listdir):
+                DbDriver.load_tables(mock_db)
+
+        # assert
+        mock_os_listdir.assert_called_once_with(self.directory)
+
+        mock_db._load_excel.assert_not_called()
+        mock_db._load_csv.assert_has_calls([
+            call(os.path.join(self.directory, "labada.csv")),
+            call(os.path.join(self.directory, "macarena.csv"))
+        ])
+
+        MockTableClass.from_df.assert_has_calls([
+            call(mock_df, limit=None, read_only=True),
+            call(mock_df_2, limit=None, read_only=True)
+        ])
+
+        self.assertDictEqual(mock_db._DbDriver__tables, {
+            "labada": mock_table,
+            "macarena": mock_table_2
+        })
+
+    def test_dump_tables(self):
+        """ Unit test """
+        # arrange
+        mock_table = MagicMock()
+        mock_db = MagicMock()
+        mock_db._DbDriver__read_only = False
+        mock_db._DbDriver__tables = {"new_table": mock_table}
+        mock_db._DbDriver__dropped_tables = ["old_table", "missing_table"]
+        mock_db._filepath.side_effect = [
+            "./here/old_table.csv",
+            "./here/missing_table.csv",
+            "./here/new_table.csv"
+        ]
+
+        mock_os = MagicMock()
+        mock_os.path.exists.side_effect = [True, False]
+
+        mock_df = MagicMock()
+        mock_table.to_df.return_value = mock_df
+
+        # act
+        with patch("pkwscraper.lib.dbdriver.os", mock_os):
+            DbDriver.dump_tables(mock_db)
+
+        # assert
+        mock_db._filepath.assert_has_calls([
+            call("old_table"), call("missing_table"), call("new_table")])
+
+        mock_os.path.exists.assert_has_calls([
+            call("./here/old_table.csv"),
+            call("./here/missing_table.csv")
+        ])
+        mock_os.remove.assert_called_once_with("./here/old_table.csv")
+
+        mock_df.to_csv.assert_called_once_with("./here/new_table.csv", sep=";")
+
+        self.assertListEqual(mock_db._DbDriver__dropped_tables, [])
+
+
+    # ===== INTEGRATION TESTS =====
+
+    def test_init_not_exists(self):
+        # test error if read only and not exists
+        with self.assertRaises(IOError):
+            dbdriver = DbDriver(db_directory=self.directory, read_only=True)
+
+        # test fields and creating directory
+        dbdriver = DbDriver(db_directory=self.directory, limit=50)
+        self.assertEqual(dbdriver.db_directory, self.directory)
+        self.assertEqual(dbdriver.limit, 50)
+        self.assertFalse(dbdriver._DbDriver__read_only)
+        self.assertListEqual(dbdriver._DbDriver__dropped_tables, [])
+        self.assertDictEqual(dbdriver._DbDriver__tables, {})
+        self.assertTrue(os.path.exists(self.directory))
+
+        # clean up
+        os.rmdir(self.directory)
+
+    def test_init_exists(self):
+        # create some synthetic tables data
+        self._make_synthetic_data()
+
+        # test tables data
+        dbdriver = DbDriver(db_directory=self.directory, read_only=True)
+        self.assertEqual(len(dbdriver._DbDriver__tables), 2)
+        self.assertDictEqual(dbdriver._DbDriver__tables["first_table"]._Table__data, {
+            101: {'num': 9,  'char': 'a'},
+            102: {'num': 16, 'char': 'b'},
+            103: {'num': 25, 'char': 'c'},
+        })
+        self.assertDictEqual(dbdriver._DbDriver__tables["second_table"]._Table__data, {
+            0: {'num': 36, 'char': 'd'},
+            1: {'num': 49, 'char': 'e'},
+            2: {'num': 64, 'char': 'f'},
+        })
+
+        # clean up
+        self._clean_synthetic_data()
+
+    def test_read_only_errors(self):
+        # arrange
+        self._make_synthetic_data()
+        db = DbDriver(self.directory, read_only=True)
+        # saving to harddrive
+        with self.assertRaises(IOError) as e:
+            db.dump_tables()
+        self.assertEqual(e.exception.args[0], "DB is for reading only.")
+        # adding table
+        with self.assertRaises(IOError) as e:
+            db.create_table("test_table")
+        self.assertEqual(e.exception.args[0], "DB is for reading only.")
+        # puting records
+        with self.assertRaises(IOError) as e:
+            db["first_table"].put({"c": 5})
+        self.assertEqual(e.exception.args[0], "Table is for read only.")
+        # dropping table
+        with self.assertRaises(IOError) as e:
+            db.delete_table("first_table")
+        self.assertEqual(e.exception.args[0], "DB is for reading only.")
+        # deleting db
+        with self.assertRaises(IOError) as e:
+            db.get_deleting_access()
+        self.assertEqual(e.exception.args[0], "DB is for reading only.")
+        # clean up
+        self._clean_synthetic_data()
+
+    def test_load_csv(self):
+        # arrange
+        self._make_synthetic_data()
+
+        # act
+        df_1 = DbDriver._load_csv(self.path_1)
+        df_2 = DbDriver._load_csv(self.path_2)
+
+        # assert
+        self.assertEqual(len(df_1.columns), 2)
+        self.assertEqual(len(df_1), 3)
+        self.assertEqual(df_1.index.name, "_id")
+        self.assertEqual(len(df_2.columns), 2)
+        self.assertEqual(len(df_2), 3)
+        self.assertEqual(df_2.index.name, "_id")
+
+        # absterge
+        self._clean_synthetic_data()
+
+    def test_load_excel(self):
+        """ DEPRECATED """
         pass
 
-    def test_not_deleting(self):
-        path = "./testing_tables_2/"
-        def inner():
-            db = DbDriver(db_directory=path)
-            db.create_table("names")
-            db.dump_tables()
-        inner()
-        print("after calling inner scope")
-        assert os.path.exists(path)
-        
-        db2 = DbDriver(db_directory=path)
-        delete_access_code = db2.access_delete()
-        delete_access_code = delete_access_code[43:53]
-        db2.__del__(delete_access_code)
-        assert not os.path.exists(path)
+    def test_delete(self):
+        # arrange
+        self._make_synthetic_data()
+        self.assertTrue(os.path.exists(self.directory))
+        dbdriver = DbDriver(db_directory=self.directory)
+        dbdriver.create_table("names")
+        dbdriver.dump_tables()
+        # act
+        deleting_access_code = dbdriver.get_deleting_access()
+        print(deleting_access_code)
+        deleting_access_code = deleting_access_code[43:53]
+        dbdriver.delete(deleting_access_code)
+        # assert
+        self.assertFalse(os.path.exists(self.directory))
 
-    def test_db_driver(self):
-        path = "./testing_tables/"
-        db = DbDriver(db_directory=path)
-        assert os.path.exists(path)
-        db.create_table("names")
-        db.dump_tables()
-        del db
-        assert os.path.exists(path)
-        db2 = DbDriver(db_directory=path)
-        delete_access_code = db2.access_delete()
-        print(delete_access_code)
-        delete_access_code = delete_access_code[43:53]
-        print(delete_access_code)
-        # TODO - RMDIR RECURSIVE NEEDED
-        db2.__del__(delete_access_code)
-        del db2
-        
-        assert not os.path.exists(path)
-        try:
-            print(db2)
-            raise RuntimeError('error not raised')
-        except UnboundLocalError:
-            pass
-
-    def test_db_driver_load_ids(self):
+    def test_whole(self):
+        """ Main integration test """
         # arrange
         record_1 = {"a": 1, "b": 2}
         record_2 = {"c": 8, "b": 4}
 
         # make and save db
-        path = "./testing_tables/"
-        db = DbDriver(db_directory=path)
+        db = DbDriver(db_directory=self.directory)
         db.create_table("my_table")
         id_1 = db["my_table"].put(record_1)
         id_2 = db["my_table"].put(record_2)
         db.dump_tables()
-        del db
 
         # open the db again
-        db = DbDriver(db_directory=path)
-        my_table = db["my_table"]
+        db2 = DbDriver(db_directory=self.directory)
+        my_table = db2["my_table"]
         records = my_table.find({})
-        assert len(records) == 2
-        print(list(records))
-        assert records[id_1] == record_1
-        assert records[id_2] == record_2
+        self.assertEqual(len(records), 2)
+        self.assertDictEqual(records[id_1], record_1)
+        self.assertDictEqual(records[id_2], record_2)
 
         # remove db
-        delete_access_code = db.access_delete()
-        delete_access_code = delete_access_code[43:53]
-        db.__del__(delete_access_code)
-        del db
-
-    def test_db_read_only(self):
-        path = "./testing_tables/"
-        # test non-existing
-        try:
-            db = DbDriver(path, read_only=True)
-            raise RuntimeError('error not raised')
-        except IOError as e:
-            assert str(e) == "DB for read does not exist."
-
-        # create testing db
-        db = DbDriver(path)
-        db.create_table("my_table")
-        id_1 = db["my_table"].put({"a": 1, "b": 2})
-        db.dump_tables()
-        del db
-
-        # test saving of read only
-        db = DbDriver(path, read_only=True)
-
-        try:
-            db.dump_tables()
-            raise RuntimeError('error not raised')
-        except IOError as e:
-            assert str(e) == "DB is for reading only."
-
-        try:
-            db.create_table("test_table")
-            raise RuntimeError('error not raised')
-        except IOError as e:
-            assert str(e) == "DB is for reading only."
-
-        try:
-            db["my_table"].put({"c": 5})
-            raise RuntimeError('error not raised')
-        except IOError as e:
-            assert str(e) == "Table is for read only."
-
-        try:
-            db.delete_table("my_table")
-            raise RuntimeError('error not raised')
-        except IOError as e:
-            assert str(e) == "DB is for reading only."
-
-        try:
-            db.access_delete()
-            raise RuntimeError('error not raised')
-        except IOError as e:
-            assert str(e) == "DB is for reading only."
-
-        # remove db
-        db = DbDriver(path)
-        delete_access_code = db.access_delete()
-        delete_access_code = delete_access_code[43:53]
-        db.__del__(delete_access_code)
-        del db
-
-    ##def test_existing_db():
-    ##    source_db = DbDriver(db_directory="./xlsx_data", limit=500, read_only=True)
-    ##    print(list(source_db._DbDriver__tables))
-    ##    id_s = list(source_db["okregi_sejm"].find({}))
-    ##    my_id = id_s[-1]
-    ##    print(source_db["okregi_sejm"].get(my_id))
+        deleting_access_code = db2.get_deleting_access()
+        deleting_access_code = deleting_access_code[43:53]
+        db2.delete(deleting_access_code)
+        assert not os.path.exists(path)
 
 
 if __name__ == "__main__":
     main()
-

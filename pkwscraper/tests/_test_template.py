@@ -1,12 +1,13 @@
 
 from unittest import main, skip, TestCase
+from unittest.mock import call, MagicMock, patch
 
 from xxx import yyy
 
 
 class Test(TestCase):
     """
-    - test
+    - test 
     """
     def setUp(self):
         pass
@@ -15,6 +16,12 @@ class Test(TestCase):
         pass
 
     def test_(self):
+        # arrange
+        
+        # act
+        
+        # assert
+        
         pass
 
 
