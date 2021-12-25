@@ -74,16 +74,10 @@ class Table:
     @classmethod
     def from_df(cls, df, limit=None, read_only=False):
         table = cls(read_only=read_only)
-        try:
-            print(df.columns[0])  # TODO - WHAT IS THIS FOR ?   PROBABLY REMOVE
-        except IndexError:
-            print(df)
         i = 0
         for _id, record_ser in df.iterrows():
-            if i % 100 == 0:
-                print(i, _id)
-                if limit and i >= limit:
-                    break
+            if limit and i >= limit:
+                break
             i += 1
             record = dict(record_ser.dropna())
             table.put(record, _id=_id, _Table__force=True)
@@ -219,27 +213,10 @@ class DbDriver:
         else:
             if self.__read_only:
                 raise IOError("DB for read does not exist.")
-            # TODO - test it maybe
             os.makedirs(db_directory, exist_ok=True)
 
     def __getitem__(self, name):
         return self.__tables[name]
-
-    def __del__(self, access_code=None):
-        # IT IS CALLED AFTER EXITING SCOPE
-        print('entered deleting')
-        if access_code is None or self.__read_only:
-            return
-        if access_code == self.deleting_access_code:
-            # REMOVE TO THE FIRST LEVEL
-            for name in self.__tables:
-                filepath = self._filepath(name)
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-            os.rmdir(self.db_directory)
-            print("Directory with data base deleted.")
-            return
-        print("Incorrect access code, directory was not deleted.")
 
     def _filepath(self, name):
         filename = f"{name}.csv"
@@ -285,8 +262,6 @@ class DbDriver:
                 continue
 
             # load file
-            print()
-            print(filename)
             filepath = os.path.join(self.db_directory, filename)
             if filename.endswith(".csv"):
                 table_df = self._load_csv(filepath)
@@ -306,18 +281,15 @@ class DbDriver:
         Delete from harddrive the `csv` files corresponding to
         deleted `Tables` and overwrite other `Tables`.
         """
-        # TODO - test it
         if self.__read_only:
             raise IOError("DB is for reading only.")
         for deleted_name in self.__dropped_tables:
-            # TODO - reset state (ie empty the dropped tables list)
             filepath = self._filepath(deleted_name)
             if os.path.exists(filepath):
                 os.remove(filepath)
+        self.__dropped_tables.clear()
         for name, table in self.__tables.items():
-            print(f'dumping table "{name}", records: {len(table.find({}))}')
             filepath = self._filepath(name)
-            # TODO - test it
             table.to_df().to_csv(filepath, sep=";")
 
     def create_table(self, name):
@@ -343,3 +315,24 @@ class DbDriver:
         access_code = "".join(access_code)
         self.deleting_access_code = access_code
         return f"The delete access code [characters 43-53]: {access_code}"
+
+    def delete(self, access_code):
+        """
+        The access code must be extracted from `get_deleting_access`
+        method for the security reason. Deleting the directories on
+        harddrive need confirmation, because it cannot be undone.
+        """
+        if self.__read_only:
+            raise IOError("DB is for reading only.")
+        if self.deleting_access_code is None:
+            raise RuntimeError(
+                "Access for deleting not granted. Call `get_deleting_access` first.")
+        if access_code == self.deleting_access_code:
+            for name in self.__tables:
+                filepath = self._filepath(name)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+            os.rmdir(self.db_directory)
+        else:
+            raise PermissionError("Incorrect access code, directory "
+                                  "was not deleted. See method docstring.")

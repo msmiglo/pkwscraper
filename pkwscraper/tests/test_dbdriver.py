@@ -515,26 +515,37 @@ class TestDbDriver(TestCase):
         # arrange
         self._make_synthetic_data()
         db = DbDriver(self.directory, read_only=True)
+
         # saving to harddrive
         with self.assertRaises(IOError) as e:
             db.dump_tables()
         self.assertEqual(e.exception.args[0], "DB is for reading only.")
+
         # adding table
         with self.assertRaises(IOError) as e:
             db.create_table("test_table")
         self.assertEqual(e.exception.args[0], "DB is for reading only.")
+
         # puting records
         with self.assertRaises(IOError) as e:
             db["first_table"].put({"c": 5})
         self.assertEqual(e.exception.args[0], "Table is for read only.")
+
         # dropping table
         with self.assertRaises(IOError) as e:
             db.delete_table("first_table")
         self.assertEqual(e.exception.args[0], "DB is for reading only.")
-        # deleting db
+
+        # obtaining deleting access code
         with self.assertRaises(IOError) as e:
             db.get_deleting_access()
         self.assertEqual(e.exception.args[0], "DB is for reading only.")
+
+        # deleting db
+        with self.assertRaises(IOError) as e:
+            db.delete(access_code="something")
+        self.assertEqual(e.exception.args[0], "DB is for reading only.")
+
         # clean up
         self._clean_synthetic_data()
 
@@ -570,7 +581,6 @@ class TestDbDriver(TestCase):
         dbdriver.dump_tables()
         # act
         deleting_access_code = dbdriver.get_deleting_access()
-        print(deleting_access_code)
         deleting_access_code = deleting_access_code[43:53]
         dbdriver.delete(deleting_access_code)
         # assert
@@ -601,7 +611,7 @@ class TestDbDriver(TestCase):
         deleting_access_code = db2.get_deleting_access()
         deleting_access_code = deleting_access_code[43:53]
         db2.delete(deleting_access_code)
-        assert not os.path.exists(path)
+        assert not os.path.exists(self.directory)
 
 
 if __name__ == "__main__":
