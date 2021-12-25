@@ -411,7 +411,7 @@ class TestDbDriver(TestCase):
         # act
         with patch("pkwscraper.lib.dbdriver.Table", MockTableClass):
             with patch("pkwscraper.lib.dbdriver.os.listdir", mock_os_listdir):
-                DbDriver.load_tables(mock_db)
+                DbDriver._load_tables(mock_db)
 
         # assert
         mock_os_listdir.assert_called_once_with(self.directory)

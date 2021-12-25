@@ -10,7 +10,11 @@ EXTENSIONS = ['csv', 'xls', 'xlsx']
 
 class Table:
     """
-    `Table` can be loaded as read only - the modifying and
+    `Table` class represents DB Table containing records with given
+    id's. Constructor creates empty table. `from_df` method gets
+    data from `pandas.DataFrame` object.
+
+    `Table` can be created as read only - the modifying and
     deleting operations cannot be performed.
 
     Records can be read directly by record ID (if known). Then it
@@ -19,31 +23,29 @@ class Table:
     Searching a `Table` is done by `find` method - it can
     be called with criterions for fields with syntax:
 
-    `find(query={"field_name_1": value_1, field_name_2: value_2})`
+    `find(query={field_name_1: value_1, field_name_2: value_2})`
 
     This will return all records which have the given fields with
-    given values.
-
-    The returned value will be dict of records with its ID as key.
-    Records are represented as "documents" which are dictionaries
-    of `name: value` pairs. Names of fields in records are not
-    restricted, except "_id" field, which is the record ID.
+    given values. The return structure is `dict` of records with its
+    ID as key. Records are represented as "documents" which are
+    dictionaries of `name: value` pairs. Names of fields in records
+    can be anything, except "_id" field, which is the record ID.
 
     The `find_one` method can be used to return just one result
     (first found). It takes the same kind of query. It returns the
     id of record, and the record itself (so the tuple is returned).
-    If there aren't any record matching the query, the `None` is
+    If there isn't any record matching the query, the `None` is
     returned.
     NOTE: just a single None object will be returned, not a tuple.
 
     If the `fields` parameter is given - the returned value of `find`
     and `find_one` methods is list of results. Each result represent
     a single record that mathces the `query`. If `fields` parameter is
-    just a single key name - each result will be just the key value,
-    therefore a method will return list of values.
+    just a single key name - each result will be just the corresponding
+    value, therefore a method will return list of values.
 
     If `fields` parameter is a list of keys (or column names) - a
-    single result will be a list of the keys values from a record
+    single result will be a list of the keys values from a record,
     with order matching the order of `fields` parameter. Missing keys
     will also be included, containing `None` values. Therefore the
     method in such case will return list of lists of values.
@@ -51,10 +53,8 @@ class Table:
     Writing records to `Table` can be done via `put` method. It takes
     the ID of new record and dict with name: value pairs. If the ID
     is not provided - a UUID is generated. If the provided ID
-    duplicates an existing one - it will be overwritten. It can be
-    used for modifying records also. The `__force` parameter can be
-    used to write records to "read_only" Table, but still it will be
-    impossible to save the changes to hadrdrive.
+    duplicates an existing one - the record will be overwritten. It
+    can be used for modifying records also.
 
     Deleting or modifying records must be done manually. It is not
     supported as it is not needed for this project.
@@ -63,16 +63,24 @@ class Table:
     and vice versa - it can be loaded from `pandas.DataFrame`, but
     this time it is not guaranteed to support all strange features
     of `DataFrame`. Shortly said - `Table` can be converted to DF and
-    back and they will stay the same.
+    back and it will stay the same.
     """
     HEX_DIGITS = list('0123456789abcdef')
     UUID_PARTS = (8, 4, 4, 4, 12)
+
     def __init__(self, read_only=False):
         self.__read_only = read_only
         self.__data = {}
 
     @classmethod
     def from_df(cls, df, limit=None, read_only=False):
+        """
+        df: pandas.DataFrame - data structure containing table data
+        limit: None/int - maximum number of records to be loaded
+        read_only: bool - if table has to be protected from changing
+
+        returns: Table
+        """
         table = cls(read_only=read_only)
         i = 0
         for _id, record_ser in df.iterrows():
@@ -84,6 +92,9 @@ class Table:
         return table
 
     def to_df(self):
+        """
+        returns: pandas.DataFrame
+        """
         if self.__read_only:
             raise IOError("Table is for read only.")
         df = pd.DataFrame(self.__data).T
@@ -101,6 +112,12 @@ class Table:
         return "-".join(parts)
 
     def put(self, record, _id=None, __force=False):
+        """
+        record: dict - record with `name: value` pairs
+        _id: key for record or None
+
+        returns: Table
+        """
         if self.__read_only and not __force:
             raise IOError("Table is for read only.")
         record = dict(record)
@@ -130,6 +147,13 @@ class Table:
         return result
 
     def find(self, query, fields=None):
+        """
+        query: dict - dictionary with fields and values to be matched
+            in searched records
+        fields: key/list/None - keys that has to be included in results
+
+        returns: dict/list
+        """
         results = self._find(query)
         if fields is None:
             return results
@@ -150,6 +174,13 @@ class Table:
                 return _id, dict(record)
 
     def find_one(self, query, fields=None):
+        """
+        query: dict - dictionary with fields and values to be matched
+            in searched records
+        fields: key/list/None - keys that has to be included in results
+
+        returns: dict/value/None
+        """
         one = self._find_one(query)
         if one is None:
             return None
@@ -167,26 +198,29 @@ class Table:
 
 class DbDriver:
     """
-    `DbDriver` operates on harddrive directories. One directory can be
-    treated as one DB. Directory contains `Tables` represented by `csv` files.
+    `DbDriver` is a class that implements over-simplified NoSQL DB
+    engine based on pure python data structures. Syntax of queries is
+    inspired by MongoDB.
 
-    `DbDriver` loads or creates a DB on harddrive. DBs opened with "read_only"
-    parameter set to `True`, will only allow to read data. `Tables` however can be
-    modified by `put` method with `__force` parameter, but the changes cannot
-    be saved to harddrive anyway.
+    It operates on harddrive directories. One directory can be treated
+    as one DB. Directory contains `Tables` represented by `csv` files.
 
+    `DbDriver` loads or creates a DB on harddrive. DBs opened with
+    "read_only" parameter set to `True`, will only allow to read data.
     `Tables` can be accessed by square brackets by its name.
 
-    DB can have `Table` added or deleted by `create_table` and `delete_table`
-    methods, respectively.
+    DB can have `Table` added or deleted by `create_table` and
+    `delete_table` methods, respectively.
 
-    The `load_tables` method allows to load DB from harddrive, which is done in
-    constructor anyway.
+    The `load_tables` method allows to load DB from harddrive, which
+    is done in constructor anyway.
 
     The `dump_tables` method will save changes to harddrive.
-    NOTE: when ending work with DbDriver, the changes will not be saved
-    automatically. Each time the work needs to be saved - the `dump_tables`
-    method must be called.
+    NOTE: when ending work with DbDriver, the changes will not be
+    saved automatically. Each time the work needs to be saved - the
+    `dump_tables` method must be called.
+
+
     - init
     - delete db
     - delete table
@@ -194,10 +228,14 @@ class DbDriver:
     - load tables - make private maybe
     - dump_tables - delete not present tables maybe or register which to delete
 
-    if the database is read only - it can be loaded from disc but not be changed
-    otherwise all changes are saved to disc only when dump_tables() called
+
     """
     def __init__(self, db_directory, limit=None, read_only=False):
+        """
+        db_directory: str - directory which contains DB tables
+        limit: int/None - max numbers of records to be loaded in one table
+        read_only: bool - whether to protect DB from changes
+        """
         self.delete_access_code = None
         self.limit = limit
         self.__read_only = read_only
@@ -209,7 +247,7 @@ class DbDriver:
         self.db_directory = db_directory
         self.__tables = {}
         if os.path.exists(db_directory):
-            self.load_tables()
+            self._load_tables()
         else:
             if self.__read_only:
                 raise IOError("DB for read does not exist.")
@@ -255,7 +293,7 @@ class DbDriver:
             table_df = table_df.set_index("_id")
         return table_df
 
-    def load_tables(self):
+    def _load_tables(self):
         for filename in os.listdir(self.db_directory):
             # check extension
             if not any(filename.endswith("."+ext) for ext in EXTENSIONS):
@@ -293,6 +331,10 @@ class DbDriver:
             table.to_df().to_csv(filepath, sep=";")
 
     def create_table(self, name):
+        """
+        Creates new table with given name, or overwrites the existing
+        one with empty table.
+        """
         if self.__read_only:
             raise IOError("DB is for reading only.")
         table = Table()
@@ -301,12 +343,21 @@ class DbDriver:
             self.__dropped_tables.remove(name)
 
     def delete_table(self, name):
+        """
+        Deletes table from DB by given name. It does not take effect
+        on harddrive directory until `dump_tables` is called.
+        """
         if self.__read_only:
             raise IOError("DB is for reading only.")
         self.__tables.pop(name)
         self.__dropped_tables.append(name)
 
     def get_deleting_access(self):
+        """
+        Enables the deletion of whole DB from harddrive directory.
+        It returns the special code, which needs to be passed to
+        the `delete` method.
+        """
         if self.__read_only:
             raise IOError("DB is for reading only.")
         characters_list = ("1234567890`~!@#$%^&*()_+=-[]\;',./"
@@ -318,9 +369,11 @@ class DbDriver:
 
     def delete(self, access_code):
         """
-        The access code must be extracted from `get_deleting_access`
-        method for the security reason. Deleting the directories on
-        harddrive need confirmation, because it cannot be undone.
+        Deletion of entire DB from harddrive directory, including the
+        directory. The access code must be extracted from
+        `get_deleting_access` method for the security reason. Deleting
+        the directories on harddrive needs confirmation, because it
+        cannot be undone.
         """
         if self.__read_only:
             raise IOError("DB is for reading only.")
