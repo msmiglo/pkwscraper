@@ -33,9 +33,29 @@ class Downloader:
         self.__local_directory = directory
 
     def download(self, relative_url, force=False):
+        # convert url to file path
         if not relative_url.startswith("/"):
             raise ValueError('Relative URL path should start with "/".')
-        pass
+        filename = self._convert_filename(relative_url)
+        filepath = os.path.join(self.__local_directory, filename)
+
+        # check cache
+        if not force and os.path.exists(filepath):
+            file_content = self._load_file(filepath)
+            return file_content
+
+        # download file from Internet
+        url = self.__base_url + relative_url
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise ConnectionError(
+                f'Server did not return a requested resource. '
+                f'Reason: "{response.reason}".')
+
+        # cache and return the file content
+        file_content = response.content
+        self._save_file(file_content, filepath)
+        return file_content
 
     @staticmethod
     def _convert_filename(relative_url):
@@ -48,127 +68,11 @@ class Downloader:
 
     @staticmethod
     def _save_file(content, filepath):
-        pass
+        with open(filepath, "wb") as f:
+            f.write(content)
 
     @staticmethod
     def _load_file(filepath):
-        pass
-
-
-
-
-'''
-=========================
-=== RESEARCH NOTES... ===
-=========================
-
-
-
-
-
-exit()
-
-import os
-
-import lxml.html
-import pandas as pd
-import requests
-
-
-BASE_URL = "https://parlament2015.pkw.gov.pl"
-LOCAL_PATH = "./xlsx_data/"
-N_OKREGI = 41
-
-
-def download_xlsx_data_results(force=False):
-    path = "/wyniki_okr_sejm/"
-
-    for i in range(N_OKREGI):
-        nr_okregu = "%02i" % (i+1)
-        filename = f"{nr_okregu}.xlsx"
-        print(filename)
-
-        local_file = LOCAL_PATH + filename
-        if os.path.exists(local_file) and not force:
-            continue
-        url = BASE_URL + path + filename
-        resp = requests.get(url)
-        print(resp)
-        file_content = resp.content
-        if resp.status_code == 200:
-            with open(local_file, 'wb') as f:
-                f.write(file_content)
-        else:
-            raise ConnectionError
-
-
-def _extract_region_list(html_content=None):
-    # get content
-    if html_content is None:
-        html_content = open('root.html', 'rb').read()
-    root = lxml.html.fromstring(html_content)
-
-    # get table of okregi
-    okregi_table_query = '//div[@id="okregi_bottom"]//table'
-    okregi_table = root.xpath(okregi_table_query)
-    assert len(okregi_table) == 1
-    print(okregi_table)
-    table_headers = okregi_table[0].xpath('./thead/tr/th/text()')
-    table_headers.append('relative_path')
-    print(len(table_headers))
-    print(table_headers)
-    okregi_elems = okregi_table[0].xpath('./tbody/tr')
-    print(len(okregi_elems))
-    print(okregi_elems)
-    okregi = []
-    for okreg in okregi_elems:
-        # TODO - jeśli jest puste to omija
-        okreg_path = okreg.xpath('(./td/a/@href)[1]')
-        okreg_list = okreg.xpath('./td/a/text()')
-        okreg_list = [el.strip() for el in okreg_list]
-        #print(okreg_path)
-        #print(okreg_list)
-        okregi.append(okreg_list + okreg_path)
-    okregi_df = pd.DataFrame(okregi, columns=table_headers)
-    okregi_df = okregi_df.set_index("Nr")
-    print(okregi_df)
-    print(okregi_df.iloc[5])
-
-
-
-
-    
-def download_commitees_data(force=False):
-    filename = "komitety.csv"
-    local_file = LOCAL_PATH + filename
-    
-    if os.path.exists(local_file) and not force:
-        return
-
-    path = "/komitety"
-    url = BASE_URL + path
-    resp = requests.get(url)
-    print(resp)
-    html_content = resp.content
-##    if resp.status_code == 200:
-##        with open('root.html', 'wb') as f:
-##            f.write(html_content)
-    komitety_df = _extract_commities_list(html_content)
-    komitety_df.to_csv(local_file, sep=";")
-
-
-def check_other_data():
-    for filename in [
-        '2015-gl-lis-gm.xls',
-        '2015-gl-lis-obw.xls',
-        '2015-gl-lis-okr.xls',
-        '2015-gl-lis-pow.xls',
-        '2015-gl-lis-woj.xls',
-        'kandsejm2015-10-19-10-00.xls',
-        #'kandsen2015-10-19-10-00.xls',
-    ]:
-        local_file = LOCAL_PATH + filename
-        if not os.path.exists(local_file):
-            print(
-                f'File "{local_file}" not found - download it from PKW site.')
-'''
+        with open(filepath, "rb") as f:
+            content = f.read()
+        return content

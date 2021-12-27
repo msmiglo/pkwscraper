@@ -3,11 +3,13 @@ import os
 from unittest import main, skip, TestCase
 from unittest.mock import call, MagicMock, patch
 
-from pkwscraper.lib.downloader import Downloader
+from pkwscraper.lib.downloader import BASE_URL_DICT, Downloader
 
 
 class TestDownloader(TestCase):
     """
+    These are unit tests for methods with logic.
+
     - test init
     - test wrong year of elections
     - test not existing directory
@@ -61,7 +63,7 @@ class TestDownloader(TestCase):
         with patch("pkwscraper.lib.downloader.os", mock_os):
             with patch("pkwscraper.lib.downloader.BASE_URL_DICT",
                        self.mock_url_dict):
-                dl = Downloader(2015, self.local_directory)
+                dl = Downloader("2015", self.local_directory)
                 # assert
                 self.assertEqual(dl._Downloader__base_url,
                                  "https://www.pkw2015.pl")
@@ -103,18 +105,19 @@ class TestDownloader(TestCase):
     def test_return_cached_file(self):
         # arrange
         dl = MagicMock()
+        dl._Downloader__local_directory = self.local_directory
         dl._convert_filename.return_value = self.filepath
         dl._load_file.return_value = self.blob_content
-        mock_os = MagicMock()
-        mock_os.path.exists.return_value = True
+        mock_exists = MagicMock()
+        mock_exists.return_value = True
 
         # act
-        with patch("pkwscraper.lib.downloader.os", mock_os):
+        with patch("pkwscraper.lib.downloader.os.path.exists", mock_exists):
             file_content = Downloader.download(dl, self.relative_url)
 
         # assert
         dl._convert_filename.assert_called_once_with(self.relative_url)
-        mock_os.path.exists.assert_called_once_with(self.filepath)
+        mock_exists.assert_called_once_with(self.filepath)
         dl._load_file.assert_called_once_with(self.filepath)
 
     def test_wrong_relative_path(self):
@@ -131,11 +134,11 @@ class TestDownloader(TestCase):
         # arrange
         dl = MagicMock()
         dl._convert_filename.return_value = self.filename
-        dl._DbDriver__base_url = self.mock_url_dict[2015]
-        dl._DbDriver__local_directory = self.local_directory
+        dl._Downloader__base_url = self.mock_url_dict[2015]
+        dl._Downloader__local_directory = self.local_directory
 
-        mock_os = MagicMock()
-        mock_os.path.exists.return_value = False
+        mock_exists = MagicMock()
+        mock_exists.return_value = False
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -145,13 +148,13 @@ class TestDownloader(TestCase):
         mock_requests.get.return_value = mock_response
 
         # act
-        with patch("pkwscraper.lib.downloader.os", mock_os):
+        with patch("pkwscraper.lib.downloader.os.path.exists", mock_exists):
             with patch("pkwscraper.lib.downloader.requests", mock_requests):
                 file_content = Downloader.download(dl, self.relative_url)
 
         # assert
         dl._convert_filename.assert_called_once_with(self.relative_url)
-        mock_os.path.exists.assert_called_once_with(self.filepath)
+        mock_exists.assert_called_once_with(self.filepath)
         mock_requests.get.assert_called_once_with(
             self.mock_url_dict[2015]+self.relative_url)
         dl._save_file.assert_called_once_with(self.blob_content, self.filepath)
@@ -161,11 +164,11 @@ class TestDownloader(TestCase):
         # arrange
         dl = MagicMock()
         dl._convert_filename.return_value = self.filename
-        dl._DbDriver__base_url = self.mock_url_dict[2015]
-        dl._DbDriver__local_directory = self.local_directory
+        dl._Downloader__base_url = self.mock_url_dict[2015]
+        dl._Downloader__local_directory = self.local_directory
 
-        mock_os = MagicMock()
-        mock_os.path.exists.return_value = False
+        mock_exists = MagicMock()
+        mock_exists.return_value = False
 
         mock_response = MagicMock()
         mock_response.status_code = 503
@@ -174,7 +177,7 @@ class TestDownloader(TestCase):
         mock_requests.get.return_value = mock_response
 
         # act
-        with patch("pkwscraper.lib.downloader.os", mock_os):
+        with patch("pkwscraper.lib.downloader.os.path.exists", mock_exists):
             with patch("pkwscraper.lib.downloader.requests", mock_requests):
                 with self.assertRaises(ConnectionError):
                     Downloader.download(dl, self.relative_url)
@@ -186,11 +189,11 @@ class TestDownloader(TestCase):
         # arrange
         dl = MagicMock()
         dl._convert_filename.return_value = self.filename
-        dl._DbDriver__base_url = self.mock_url_dict[2015]
-        dl._DbDriver__local_directory = self.local_directory
+        dl._Downloader__base_url = self.mock_url_dict[2015]
+        dl._Downloader__local_directory = self.local_directory
 
-        mock_os = MagicMock()
-        mock_os.path.exists.return_value = True
+        mock_exists = MagicMock()
+        mock_exists.return_value = True
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -200,7 +203,7 @@ class TestDownloader(TestCase):
         mock_requests.get.return_value = mock_response
 
         # act
-        with patch("pkwscraper.lib.downloader.os", mock_os):
+        with patch("pkwscraper.lib.downloader.os.path.exists", mock_exists):
             with patch("pkwscraper.lib.downloader.requests", mock_requests):
                 file_content = Downloader.download(
                     dl, self.relative_url, force=True)
@@ -211,8 +214,80 @@ class TestDownloader(TestCase):
         dl._save_file.assert_called_once_with(self.blob_content, self.filepath)
         self.assertEqual(file_content, self.blob_content)
 
-        mock_os.path.exists.assert_not_called()
+        mock_exists.assert_not_called()
         dl._load_file.assert_not_called()
+
+
+class TestIntegrationDownloader(TestCase):
+    """
+    Integration testing with real system and internet calls.
+
+    - init
+    - get from cache
+    - download wrong file
+    - download
+    - force redownload
+    """
+    def setUp(self):
+        self.year = 2015
+        self.local_directory = "."
+        self.rel_path = "/Frekwencja/300706.html"
+        self.fake_rel_path = "/wyniki/1410_1945_made_up_file.csv"
+
+        self.filepath = "./Frekwencja_300706.html"
+        self.fake_filepath = "./wyniki_1410_1945_made_up_file.csv"
+        self.fake_content = b"0369258147"
+
+        if os.path.exists(self.filepath) or os.path.exists(self.fake_filepath):
+            raise RuntimeError(
+                "Cannot conduct testing, test files are not cleaned.")
+
+    def tearDown(self):
+        if os.path.exists(self.filepath):
+            os.remove(self.filepath)
+        if os.path.exists(self.fake_filepath):
+            os.remove(self.fake_filepath)
+
+    def test_init(self):
+        dl = Downloader(2015, self.local_directory)
+        self.assertEqual(dl._Downloader__base_url, BASE_URL_DICT[2015])
+        self.assertEqual(dl._Downloader__local_directory, self.local_directory)
+
+    def test_get_from_cache(self):
+        # arrange
+        dl = Downloader(2015, self.local_directory)
+        dl._save_file(self.fake_content, self.fake_filepath)
+        # act
+        result = dl.download(self.fake_rel_path)
+        # assert
+        self.assertEqual(result, self.fake_content)
+
+    def test_download_wrong_file(self):
+        dl = Downloader(2015, self.local_directory)
+        with self.assertRaises(ConnectionError):
+            result = dl.download(self.fake_rel_path)
+
+    def test_download(self):
+        # arrange
+        dl = Downloader(2015, self.local_directory)
+        # act
+        result = dl.download(self.rel_path)
+        # assert
+        self.assertIsInstance(result, bytes)
+        self.assertGreater(len(result), 100)
+        self.assertTrue(os.path.exists(self.filepath))
+
+    def test_force_redownload(self):
+        # arrange
+        dl = Downloader(2015, self.local_directory)
+        dl._save_file(self.fake_content, self.filepath)
+        # check cache
+        result = dl.download(self.rel_path)
+        self.assertEqual(result, self.fake_content)
+        # check redownload
+        result = dl.download(self.rel_path, force=True)
+        self.assertNotEqual(result, self.fake_content)
+        self.assertTrue(os.path.exists(self.filepath))
 
 
 if __name__ == "__main__":
