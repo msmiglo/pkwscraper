@@ -1,6 +1,8 @@
 
 from lxml import html
 import re
+import xlrd
+from zipfile import ZipFile
 
 from pkwscraper.lib.dbdriver import DbDriver
 from pkwscraper.lib.downloader import Downloader
@@ -76,12 +78,12 @@ class Sejm2015Scraper(BaseScraper):
         xpath_okregi_mapa = '/html/body//div[@id="wyniki1"]//' \
                             'div[@id="wyniki1_top_mapa"]//svg//a'
         okregi_hrefs = html_tree.xpath(xpath_okregi_mapa)
-        print()
-        print(len(okregi_hrefs))
 
         xpath_okregi_table = '/html/body//div[@id="wyniki1"]//' \
                              'div[@id="wyniki1_tabela_suma"]//table/tbody/tr'
         okregi_table_rows = html_tree.xpath(xpath_okregi_table)
+        assert len(okregi_hrefs) == len(okregi_table_rows), \
+            f"invalid number of constituencies: {len(okregi_hrefs)}, {len(okregi_table_rows)}"
         print()
         print(len(okregi_table_rows))
 
@@ -119,10 +121,91 @@ class Sejm2015Scraper(BaseScraper):
         print()
 
     def _download_committees(self):
-        pass
+        relative_path = "/komitety.html"
+        html_content = self.dl.download(relative_path)
+        html_tree = html.fromstring(html_content)
+
+        xpath_committees = '/html/body//div[@id="komitety"]//' \
+                            'table/tbody/tr'
+        committees_elems = html_tree.xpath(xpath_committees)
+        print()
+        print(len(committees_elems))
+
+        self.db.create_table("komitety")
+
+        for html_elem in committees_elems:
+            value_elems = [child.getchildren()[0]
+                              for child in html_elem.getchildren()]
+            href_path = value_elems[0].attrib['href']
+
+            number = value_elems[0].text
+            signature = value_elems[1].text
+            type_ = value_elems[2].text
+            name = value_elems[3].text
+            shortname = value_elems[4].text
+            sejm_candidates = value_elems[5].text
+            senat_candidates = value_elems[6].text
+            status = value_elems[7].text
+
+            self.db["komitety"].put({
+                "number": number,
+                "signature": signature,
+                "type": type_,
+                "name": name,
+                "shortname": shortname,
+                "sejm_candidates": sejm_candidates,
+                "senat_candidates": senat_candidates,
+                "status": status
+            })
+
+            print(name, end=", ")
+        print()
 
     def _download_candidates(self):
-        pass
+        self.dl.download("/kandydaci.zip")
+        with ZipFile(RAW_DATA_DIRECTORY + "/kandydaci.zip") as zf:
+            zf.extractall(RAW_DATA_DIRECTORY)
+
+        book = xlrd.open_workbook(
+            RAW_DATA_DIRECTORY + "/kandsejm2015-10-19-10-00.xls")
+        sheet = book.sheet_by_index(0)
+
+        self.db.create_table("kandydaci")
+
+        for row_index in range(1, sheet.nrows):
+            row = sheet.row(row_index)
+
+            okreg_number = row[0].value
+            list_number = row[1].value
+            committee_name = row[2].value
+            position = row[3].value
+            surname = row[4].value
+            names = row[5].value
+            gender = row[6].value
+            residence = row[7].value
+            occupation = row[8].value
+            party = row[9].value
+
+            self.db["kandydaci"].put({
+                "okreg_number": okreg_number,
+                "list_number": list_number,
+                "committee_name": committee_name,
+                "position": position,
+                "surname": surname,
+                "names": names,
+                "gender": gender,
+                "residence": residence,
+                "occupation": occupation,
+                "party": party
+            })
+
+        n_candidates = sheet.nrows - 1
+        n_candidates_2 = len(self.db['kandydaci'].find({}))
+        assert n_candidates == n_candidates_2, \
+               f"invalid candidates number: {n_candidates}, {n_candidates_2}"
+
+        print()
+        print(f"Found {n_candidates} candidates.")
 
     def _download_mandates_winners(self):
         pass

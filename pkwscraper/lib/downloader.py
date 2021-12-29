@@ -15,6 +15,7 @@ ACCEPTED_EXTENSIONS = [
     ".htm",
     ".html",
     ".blob",
+    ".zip",
 ]
 
 
