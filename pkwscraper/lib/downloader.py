@@ -47,6 +47,7 @@ class Downloader:
 
         # download file from Internet
         url = self.__base_url + relative_url
+        print(f"downloading {url}...")
         response = requests.get(url)
         if response.status_code != 200:
             raise ConnectionError(

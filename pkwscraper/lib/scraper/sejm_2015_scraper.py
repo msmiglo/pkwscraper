@@ -30,16 +30,16 @@ class Sejm2015Scraper(BaseScraper):
         self._download_okregi()
         self._download_committees()
         self._download_candidates()
-        self._download_mandates_winners()
-        self._download_powiaty()
-        self._download_gminy()
-        self._download_obwody()
+        self._download_mandates_winners_and_powiaty()
+        self._download_gminy_and_obwody()
         self._download_voting_results()
-        it = True
+
+        '''it = True
         needed = False
         if it is needed:
-            self._rescribe_to_raw_db()
+            self._rescribe_to_raw_db()'''
         self.db.dump_tables()
+
         print()
 
     def _download_voivodships(self):
@@ -207,20 +207,79 @@ class Sejm2015Scraper(BaseScraper):
         print()
         print(f"Found {n_candidates} candidates.")
 
-    def _download_mandates_winners(self):
-        pass
+    def _download_mandates_winners_and_powiaty(self):
+        relative_url_template = "/349_Wyniki_Sejm/0/0/{}.html"
+        okregi = self.db["okręgi"].find({}, fields="number")
 
-    def _download_powiaty(self):
-        pass
+        self.db.create_table("mandaty")
+        self.db.create_table("powiaty")
 
-    def _download_gminy(self):
-        pass
+        print()
 
-    def _download_obwody(self):
+        for okreg_number in okregi:
+            relative_url = relative_url_template.format(okreg_number)
+            html_content = self.dl.download(relative_url)
+            html_tree = html.fromstring(html_content)
+
+            xpath_powiaty = '/html/body//div[@id="tresc"]//' \
+                            'div[@id="wyniki1_top_mapa"]//svg//a'
+            powiaty = html_tree.xpath(xpath_powiaty)
+
+            for powiat_elem in powiaty:
+                href_path = powiat_elem.attrib['xlink:href']
+                code = re.findall('\d+', href_path)[1]
+                name = powiat_elem.getchildren()[0].attrib["rel"]
+                geo = powiat_elem.getchildren()[0].attrib["d"]
+
+                self.db["powiaty"].put({
+                    "code": code,
+                    "name": name,
+                    "geo": geo
+                })
+
+                print(code, end=", ")
+            print()
+
+            xpath_winners = '/html/body//div[@id="wyniki1_tabela_frek"][1]//' \
+                            'table/tbody/tr'
+            winners_elems = html_tree.xpath(xpath_winners)
+
+            for row_elem in winners_elems:
+                cells = row_elem.getchildren()
+
+                '''#cells[0].remove(cells[0].getchildren()[0])
+                constituency_number = cells[0].text_content()
+                for attr in dir(cells[0]):
+                    print(attr, ": ", getattr(cells[0], attr))
+                input("???")'''
+                constituency_number = list(cells[0].itertext())[1]
+                list_number = cells[1].text_content()
+                position = cells[2].text_content()
+                committee_name = cells[3].text_content()
+                full_name = list(cells[4].itertext())[1]
+                assert okreg_number == constituency_number, \
+                    f"invalid constituency number: {okreg_number}, {constituency_number}"
+
+                self.db["mandaty"].put({
+                    "constituency_number": constituency_number,
+                    "list_number": list_number,
+                    "position": position,
+                    "committee_name": committee_name,
+                    "full_name": full_name
+                })
+
+                print(full_name, end=", ")
+        print()
+        n_powiaty = len(self.db["powiaty"].find({}))
+        n_mandates = len(self.db["mandaty"].find({}))
+        print(f"Found {n_powiaty} districts.")
+        print(f"{n_mandates} of mandates were given.")
+
+    def _download_gminy_and_obwody(self):
+        # gminy from scraping
+        # obwody from xlsx
         pass
 
     def _download_voting_results(self):
-        pass
-
-    def _rescribe_to_raw_db(self):
+        # votes from 41 xlsx files
         pass
