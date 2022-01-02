@@ -361,7 +361,7 @@ class Sejm2015Scraper(BaseScraper):
             self.dl.download(relative_url)
             filename = relative_url.replace("/", "_").strip("_")
 
-            book = load_workbook(RAW_DATA_DIRECTORY + "/" + filename)
+            book = load_workbook(RAW_DATA_DIRECTORY + "/" + filename, read_only=True)
             sheet = book.active
 
             # read the first row with lists and candidates names
@@ -393,17 +393,19 @@ class Sejm2015Scraper(BaseScraper):
 
             # iterate over polling districts (1 row - 1 polling district)
             print(f"Iterating over polling districts in constituency no. {constituency_number}...")
-            for row_index in range(1, sheet.max_row):
-                if row_index % 30 == 0:
+            #for row_index in range(1, sheet.max_row):
+            for row_index, row in enumerate(sheet.iter_rows()):
+                if row_index == 0:
+                    continue
+                if row_index % 100 == 0:
                     print(f"{row_index} of {sheet.max_row-1}",
                           end=", ", flush=True)
-                    break  # TODO
                 # get additional polling district data
-                commune_name = sheet.cell(row_index+1, 2).value
-                commune_code = sheet.cell(row_index+1, 3).value
+                commune_name = row[1].value
+                commune_code = row[2].value
                 commune_code = re.findall('\d+', commune_code)[0]
-                commission_name = sheet.cell(row_index+1, 4).value
-                polling_district_number = sheet.cell(row_index+1, 5).value
+                commission_name = row[3].value
+                polling_district_number = row[4].value
                 # put it into table
                 self.db["obwody_uzupełnienie"].put({
                     "commune_name": commune_name,
@@ -421,10 +423,11 @@ class Sejm2015Scraper(BaseScraper):
                     )
 
                 # iterate over candidates in the given polling district
+                #for col_index, col in row.iter_cells(27):
                 for candidate, column_index in zip(
                         candidates, candidates_cell_range):
                     committee_name, candidate_name = candidate
-                    votes = sheet.cell(row_index+1, column_index+1).value
+                    votes = row[column_index].value
                     # put data in table
                     if candidate_name != "sum":
                         self.db["wyniki"].put({
