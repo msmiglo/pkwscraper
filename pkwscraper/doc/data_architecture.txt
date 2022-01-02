@@ -10,7 +10,7 @@ id, code, name, geo, parent
 okrêgi wyborcze (constituencies):
 id, number, headquarters, voivodship, powiat_list, mandates, geo
 
-obwody (polling districts):
+obwody (polling districts):  # TODO - POPRAWIÆ
 id, number, name, full_adress, gmina, constituency, senate_constituency_number, urban_or_rural, voters
 
 listy (lists):

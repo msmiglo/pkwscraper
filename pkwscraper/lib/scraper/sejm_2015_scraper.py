@@ -1,8 +1,10 @@
 
-from lxml import html
 import re
-import xlrd
 from zipfile import ZipFile
+
+from lxml import html
+from openpyxl import load_workbook
+import xlrd
 
 from pkwscraper.lib.dbdriver import DbDriver
 from pkwscraper.lib.downloader import Downloader
@@ -21,7 +23,9 @@ class Sejm2015Scraper(BaseScraper):
         # create downloader object
         self.dl = Downloader(year=2015, directory=RAW_DATA_DIRECTORY)
         # open db for rescribing
+        print("opening DB...")
         self.db = DbDriver(RESCRIBED_DATA_DIRECTORY)
+        print("DB opened.")
 
     def run_all(self):
         # TODO - check, if the data is already downloaded
@@ -34,12 +38,9 @@ class Sejm2015Scraper(BaseScraper):
         self._download_gminy_and_obwody()
         self._download_voting_results()
 
-        '''it = True
-        needed = False
-        if it is needed:
-            self._rescribe_to_raw_db()'''
+        print("dumping DB tables...")
         self.db.dump_tables()
-
+        print("DB closed.")
         print()
 
     def _download_voivodships(self):
@@ -187,10 +188,10 @@ class Sejm2015Scraper(BaseScraper):
             party = row[9].value
 
             self.db["kandydaci"].put({
-                "okreg_number": okreg_number,
-                "list_number": list_number,
+                "okreg_number": int(okreg_number),
+                "list_number": int(list_number),
                 "committee_name": committee_name,
-                "position": position,
+                "position": int(position),
                 "surname": surname,
                 "names": names,
                 "gender": gender,
@@ -237,21 +238,12 @@ class Sejm2015Scraper(BaseScraper):
                     "geo": geo
                 })
 
-                print(code, end=", ")
-            print()
-
             xpath_winners = '/html/body//div[@id="wyniki1_tabela_frek"][1]//' \
                             'table/tbody/tr'
             winners_elems = html_tree.xpath(xpath_winners)
 
             for row_elem in winners_elems:
                 cells = row_elem.getchildren()
-
-                '''#cells[0].remove(cells[0].getchildren()[0])
-                constituency_number = cells[0].text_content()
-                for attr in dir(cells[0]):
-                    print(attr, ": ", getattr(cells[0], attr))
-                input("???")'''
                 constituency_number = list(cells[0].itertext())[1]
                 list_number = cells[1].text_content()
                 position = cells[2].text_content()
@@ -276,10 +268,172 @@ class Sejm2015Scraper(BaseScraper):
         print(f"{n_mandates} of mandates were given.")
 
     def _download_gminy_and_obwody(self):
-        # gminy from scraping
-        # obwody from xlsx
-        pass
+        # get html content for all districts (powiaty)
+        powiaty_codes = self.db["powiaty"].find({}, fields="code")
+        relative_url_template = "/349_Wyniki_Sejm/0/1/0/{}.html"
+        xpath_gminy = '/html/body//div[@id="tresc"]//' \
+                      'div[@id="wyniki1_top_mapa"]//svg//a'
+
+        self.db.create_table("gminy")
+        self.db.create_table("obwody")
+
+        # extract communes data for each district
+        for powiat_code in powiaty_codes:
+            relative_url = relative_url_template.format(powiat_code)
+            html_content = self.dl.download(relative_url)
+            html_tree = html.fromstring(html_content)
+
+            gminy = html_tree.xpath(xpath_gminy)
+
+            for gmina_elem in gminy:
+                href_path = gmina_elem.attrib['xlink:href']
+                code = re.findall('\d+', href_path)[0]
+                geo = gmina_elem.getchildren()[0].attrib["d"]
+
+                self.db["gminy"].put({
+                    "code": code,
+                    "geo": geo
+                })
+                # NOTE - `name`, `rural_or_urban` will be taken from
+                #        polling districts data in preprocessing step
+
+        # extract polling districts information from xlsx
+        self.dl.download("/wyniki_zb/2015-gl-lis-obw.zip")
+        with ZipFile(
+                RAW_DATA_DIRECTORY + "wyniki_zb_2015-gl-lis-obw.zip") as zf:
+            zf.extractall(RAW_DATA_DIRECTORY)
+
+        book = xlrd.open_workbook(
+            RAW_DATA_DIRECTORY + "/2015-gl-lis-obw.xls")
+        sheet = book.sheet_by_index(0)
+
+        for row_index in range(1, sheet.nrows):
+            row = sheet.row(row_index)
+
+            self.db["obwody"].put({
+                "constituency_number":          int(row[0].value),
+                "senate_constituency_number":   int(row[1].value),
+                "commune_code":                 row[2].value,
+                "commune_name":                 row[3].value,
+                "polling_districts_number":     int(row[4].value),
+                "full_adress":                  row[5].value,
+                "voters":                       int(row[6].value),
+                "got_ballots":                  int(row[7].value),
+                "unused_ballots":               int(row[8].value),
+                "given_ballots":                int(row[9].value),
+                "proxy_voters":                 int(row[10].value),
+                "certificate_voters":           int(row[11].value),
+                "voting_packets":               int(row[12].value),
+                "return_envelopes":             int(row[13].value),
+                "envelopes_without_statement":  int(row[14].value),
+                "unsigned_statement":           int(row[15].value),
+                "without_voting_envelope":      int(row[16].value),
+                "unseeled_voting_envelopes":    int(row[17].value),
+                "envelopes_accepted":           int(row[18].value),
+                "ballots_from_box":             int(row[19].value),
+                "envelopes_from_ballot_box":    int(row[20].value),
+                "ballots_invalid":              int(row[21].value),
+                "ballots_valid":                int(row[22].value),
+                "votes_invalid":                int(row[23].value),
+                "invalid_2_candidates":         int(row[24].value),
+                "invalid_no_vote":              int(row[25].value),
+                "invalid_candidate":            int(row[26].value),
+                "votes_valid":                  int(row[27].value)
+            })
+
+        print()
+        n_gminy = len(self.db["gminy"].find({}))
+        print(f"Found {n_gminy} communes.")
+        print()
+        n_obwody = len(self.db["obwody"].find({}))
+        print(f"Found {n_obwody} voting constituencies.")
 
     def _download_voting_results(self):
         # votes from 41 xlsx files
-        pass
+        print()
+        self.db.create_table("obwody_uzupełnienie")
+        self.db.create_table("wyniki")
+
+        constituencies = self.db["okręgi"].find({}, fields="number")
+        for constituency_number in constituencies:
+            constituency_number = int(constituency_number)
+            relative_url = f"/wyniki_okr_sejm/{constituency_number:02d}.xlsx"
+            self.dl.download(relative_url)
+            filename = relative_url.replace("/", "_").strip("_")
+
+            book = load_workbook(RAW_DATA_DIRECTORY + "/" + filename)
+            sheet = book.active
+
+            # read the first row with lists and candidates names
+            last_protocole_column_value = sheet.cell(1, 27).value
+            assert last_protocole_column_value == "Sejm - Liczba głosów ważnych oddanych łącznie na wszystkie listy kandydatów", \
+                f"wrong columns alignment: {last_protocole_column_value}"
+            current_list = None
+            candidates = []
+            # iterate over cells
+            for column_index in range(27, sheet.max_column):
+                value = sheet.cell(1, column_index+1).value
+                # beginning of new list
+                if not current_list:
+                    current_list = value
+                    candidates.append((current_list, "sum"))
+                    continue
+                # end of current list
+                if value == f"Razem {current_list}":
+                    candidates.append((current_list, "sum"))
+                    current_list = None
+                    continue
+                # get candidate
+                candidate_name = value
+                candidates.append((current_list, candidate_name))
+
+            # check correctness
+            if current_list is not None:
+                raise ValueError("Did not found end of list of candidates.")
+
+            # iterate over polling districts (1 row - 1 polling district)
+            print(f"Iterating over polling districts in constituency no. {constituency_number}...")
+            for row_index in range(1, sheet.max_row):
+                if row_index % 30 == 0:
+                    print(f"{row_index} of {sheet.max_row-1}",
+                          end=", ", flush=True)
+                    break  # TODO
+                # get additional polling district data
+                commune_name = sheet.cell(row_index+1, 2).value
+                commune_code = sheet.cell(row_index+1, 3).value
+                commune_code = re.findall('\d+', commune_code)[0]
+                commission_name = sheet.cell(row_index+1, 4).value
+                polling_district_number = sheet.cell(row_index+1, 5).value
+                # put it into table
+                self.db["obwody_uzupełnienie"].put({
+                    "commune_name": commune_name,
+                    "commune_code": commune_code,
+                    "commission_name": commission_name,
+                    "polling_district_number": polling_district_number
+                })
+
+                # prepare list of cells corresponding with candidates
+                candidates_cell_range = list(range(27, sheet.max_column))
+                if len(candidates_cell_range) != len(candidates):
+                    raise ValueError(
+                        f"Different lenght of candidates lists: "
+                        f"{len(candidates)}/{len(candidates_cell_range)}"
+                    )
+
+                # iterate over candidates in the given polling district
+                for candidate, column_index in zip(
+                        candidates, candidates_cell_range):
+                    committee_name, candidate_name = candidate
+                    votes = sheet.cell(row_index+1, column_index+1).value
+                    # put data in table
+                    if candidate_name != "sum":
+                        self.db["wyniki"].put({
+                            "commune_code": commune_code,
+                            "polling_district_number": polling_district_number,
+                            "candidate_name": candidate_name,
+                            "votes": votes
+                        })
+
+            print()
+            print(f"Finished constituency no. {constituency_number}.")
+        print()

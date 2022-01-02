@@ -66,7 +66,8 @@ class Table:
     back and it will stay the same.
     """
     HEX_DIGITS = list('0123456789abcdef')
-    UUID_PARTS = (8, 4, 4, 4, 12)
+    #UUID_PARTS = (8, 4, 4, 4, 12)
+    UUID_PARTS = (6, 4, 4)  # NOTE - this is for memory performance
 
     def __init__(self, read_only=False):
         self.__read_only = read_only
