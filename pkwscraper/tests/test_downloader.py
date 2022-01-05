@@ -90,8 +90,8 @@ class TestDownloader(TestCase):
 
     def test_check_file_extension(self):
         base = "/0/wyniki."
-        bad_extensions = ["doc", "py", "txt", "dat"]
-        good_extensions = ["csv", "xls", "xlsx", "htm", "html", "blob"]
+        bad_extensions = ["doc", "py", "txt", "dat", "rar"]
+        good_extensions = ["csv", "xls", "xlsx", "htm", "html", "blob", "zip"]
 
         for extension in bad_extensions:
             rel_url = base + extension
