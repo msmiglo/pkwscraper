@@ -31,21 +31,39 @@ class TestTable(TestCase):
     def tearDown(self):
         pass
 
-    def assertUUID(self, string):
+    '''def assertUUID(self, string):
+        """ UUID length changed for performance """
         self.assertEqual(string[8], "-")
         self.assertEqual(string[13], "-")
         self.assertEqual(string[18], "-")
         self.assertEqual(string[23], "-")
         s = string.replace("-", "")
         self.assertEqual(len(s), 32)
+        self.assertSetEqual(set(s)-set("1234567890abcdef"), set())'''
+
+    def assertUUID(self, string):
+        self.assertEqual(string[6], "-")
+        self.assertEqual(string[11], "-")
+        s = string.replace("-", "")
+        self.assertEqual(len(s), 14)
         self.assertSetEqual(set(s)-set("1234567890abcdef"), set())
 
-    def test_uuid(self):
+    '''def test_uuid(self):
+        """ UUID length changed for performance """
         self.assertUUID("ab4b42d3-2bcd-0a0c-c30b-f06988fdbc12")
         with self.assertRaises(AssertionError):
             self.assertUUID("ab4b42d3-2bcd-0a0c-cX0b-f06988fdbc12")
         with self.assertRaises(AssertionError):
             self.assertUUID("ab4b42d3-2bcd-0a0c-c30bf06988fdbc12")
+        uuid = Table._make_uuid()
+        self.assertUUID(uuid)'''
+
+    def test_uuid(self):
+        self.assertUUID("ab4b42-2bcd-0a0c")
+        with self.assertRaises(AssertionError):
+            self.assertUUID("ab4b42-2bXd-0a0c")
+        with self.assertRaises(AssertionError):
+            self.assertUUID("ab4b42-2bcd0a0c")
         uuid = Table._make_uuid()
         self.assertUUID(uuid)
 
