@@ -5,7 +5,7 @@ powiaty (districts):
 id, code, name, geo, parent
 
 gminy (communes):
-id, code, name, geo, parent
+id, code, name, urban_or_rural, geo, parent
 
 okrêgi wyborcze (constituencies):
 id, number, headquarters, voivodship, powiat_list, mandates, geo

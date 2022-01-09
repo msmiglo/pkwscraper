@@ -233,6 +233,7 @@ class Sejm2015Scraper(BaseScraper):
                 geo = powiat_elem.getchildren()[0].attrib["d"]
 
                 self.db["powiaty"].put({
+                    "constituency_number": okreg_number,
                     "code": code,
                     "name": name,
                     "geo": geo
@@ -286,12 +287,29 @@ class Sejm2015Scraper(BaseScraper):
             gminy = html_tree.xpath(xpath_gminy)
 
             for gmina_elem in gminy:
+                # get values of attributes
                 href_path = gmina_elem.attrib['xlink:href']
                 code = re.findall('\d+', href_path)[0]
+                partial_name = gmina_elem.getchildren()[0].attrib["rel"]
                 geo = gmina_elem.getchildren()[0].attrib["d"]
 
+                # Łódź and Cracow cities are divided into city districts
+                # but they have no polling districts assigned to them...
+                # Skip them.
+                # TODO - MAYBE IT WOULD BE BETTER TO GET RID OF THESE
+                # RECORDS IN THE PREPROCESSING STEP...
+                skip_condition = (
+                    partial_name.startswith("Łódź")
+                    or partial_name.startswith("Kraków")
+                )
+                skip_condition = skip_condition and code[-2:] != "01"
+                if skip_condition:
+                    continue
+
+                # put record in DB
                 self.db["gminy"].put({
                     "code": code,
+                    "partial_name": partial_name,
                     "geo": geo
                 })
                 # NOTE - `name`, `rural_or_urban` will be taken from

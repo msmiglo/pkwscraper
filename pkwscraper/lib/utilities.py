@@ -19,8 +19,10 @@ EN:
       ("dzielnica") as communes, but the number 01 is reserved so they
       have number from 02 to 19.
 - Warsaw as a district has code 14 65 01, so it is strange, because it
-      should have 14 65.
-- 14 99 01 is a code for abroad.
+      should have 14 65 00.
+- 14 99 00 is a code for abroad as the district and it has one commune
+    level unit with code 14 99 01. The "abroad district" is part of the
+    MAZOWIECKIE voivodship (code 140000) and constituency no 19.
 
 
 PL (WYTŁUMACZENIE KODÓW TERYTORIALNYCH):
@@ -40,7 +42,13 @@ PL (WYTŁUMACZENIE KODÓW TERYTORIALNYCH):
       ale są numerowane bez numerka 01, czyli jest od 02 do 19.
 - Warszawa jako powiat ma kod 14 65 01, więc w ogóle dziwnie,
       bo powinna mieć 14 65 00.
-- 14 99 01 to kod dla zagranicy.
+- 14 99 00 to kod dla zagranicy jako powiatu i ma on tylko jedną jednostkę
+      na poziomie gminy o kodzie 14 99 01. "Powiat" zagraniczny jest
+      częścią województwa Mazowieckiego (o kodzie 140000) i okręgu nr 19.
+
+UPDATE NOTE: this is not common for all elections.
+TODO: move the definition of this function to preprocessing step and make
+copy for each elections or change codes in data in preprocessing step.
 """
 
 def get_parent_code(code):
@@ -56,12 +64,13 @@ def _get_parent_code_int(code_int):
     voivod_code = code_int // 10000
     if voivod_code % 2 == 1 or not (0 < voivod_code <= 32):
         raise ValueError(f'Wrong voivodship prefix value: {code_int}.')
-    if code_int == 149901:
-        return 146501
-    if code_int == 146501:
-        return 140000
-    if code_int // 100 == 1465:
-        return 146501
+    # TODO - VERIFY THE CASE OF WARSAW CODE(S) IN OTHER ELECTIONS
+    #if code_int == 149901:
+    #    return 146501
+    #if code_int == 146501:
+    #    return 140000
+    #if code_int // 100 == 1465:
+    #    return 146501
     if code_int % 10000 == 0:
         raise ValueError("Voivodships do not have parents.")
     if code_int % 100 == 0:
