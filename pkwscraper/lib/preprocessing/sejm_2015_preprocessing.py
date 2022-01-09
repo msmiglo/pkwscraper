@@ -107,7 +107,7 @@ class Region:
         curve = [points]
         point = [x, y]
         """
-
+        pass
 
 
 class Sejm2015Preprocessing(BasePreprocessing):
@@ -139,15 +139,27 @@ class Sejm2015Preprocessing(BasePreprocessing):
 
     @staticmethod
     def clean_text(text):
+        """
+        Used to clean non-universal texts values like names of candidates,
+        committees and commissions addresses. Remove surplus spaces, replace
+        non-standard quotarion marks, etc.
+        """
         # TODO - MAYBE MOVE TO UTILITIES
         if text is None:
             return None
         text = " ".join(text.split())
         text = text.replace('„', '"').replace('”', '"')
+        text = text.replace(' , ', ', ')
+        text = text.replace('( ', '(')
         return text
 
     @staticmethod
     def parse_full_name(full_name):
+        """
+        Split full name of candidate into names and surname, asserting
+        names are styled `title case` and surname is styled `all upper
+        case`. Parts are separated by spaces.
+        """
         # TODO - ADD SPLITTING FIRST NAME MAYBE
         # TODO - MAYBE MOVE TO UTILITIES
         names, surname = full_name.rsplit(maxsplit=1)
@@ -159,7 +171,83 @@ class Sejm2015Preprocessing(BasePreprocessing):
         return names, surname
 
     @staticmethod
-    def urban_or_rural(commune_full_name, district_code):
+    def parse_commission_address(full_address, commission_name,
+                                 obwod_identifier):
+        """
+        Split full address of commission. It should be in format:
+        full_address = `{commission_name}, {commission_address}`
+        """
+        clean_text = Sejm2015Preprocessing.clean_text
+
+        full_address = clean_text(full_address)
+        commission_name = clean_text(commission_name)
+
+        # address is missing or included in commission name
+        if full_address == commission_name:
+            if "," in full_address:
+                # name contains address
+                name, address = full_address.split(",", maxsplit=1)
+                name = clean_text(name)
+                address = clean_text(address)
+                return name, address
+            else:
+                # address is missing
+                return commission_name, ""
+
+        if full_address.startswith(commission_name):
+            # regular case
+            name = commission_name
+            address = full_address[len(name):]
+
+            if address.startswith(", "):
+                # correct format
+                address = address[2:]
+                address = clean_text(address)
+                return name, address
+
+            if address.count(",") == 1:
+                # missing one comma
+                address = clean_text(address)
+                return name, address
+
+        # there is a problem with commission name
+        if full_address.count(",") == 2:
+            # can be determined by commas
+            name, address = full_address.split(",", maxsplit=1)
+            name = clean_text(name)
+            address = clean_text(address)
+        elif "ul. " in full_address:
+            # some comma is missing, try finding the street prefix
+            name, address = full_address.split("ul. ", maxsplit=1)
+            name = clean_text(name)
+            address = clean_text("ul. " + address)
+        else:
+            raise ValueError(
+                f"Cannot parse adress from:\n`{full_address}`\n"
+                f"`{commission_name}`\n`{address}`\n"
+                f"Unit identifier:\n{obwod_identifier}\n")
+
+        if "(" in address:
+            # there is a room/hall name in the address
+            address, modifier = address.split("(")
+            address = clean_text(address)
+            modifier = clean_text(modifier)
+            name += " (" + modifier
+
+        # # print information about malformed commission name
+        # if not name.startswith(commission_name):
+        #     commune_code, polling_district_number = obwod_identifier
+        #     print(f"Probable typo in commision name:\n"
+        #           f"{name}\n"
+        #           f"{commission_name}\n"
+        #           f"commune code {commune_code}, polling district no. "
+        #           f"{polling_district_number}\n")
+
+        return name, address
+
+    @staticmethod
+    def urban_or_rural(commune_full_name, commune_code):
+        district_code = get_parent_code(commune_code)
         if district_code == 146500:
             return "urban"
         if commune_full_name.startswith("gm. "):
@@ -306,7 +394,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
             if full_name is None:
                 raise ValueError(
                     f"Cannot find commune '{partial_name}' with code {code}.")
-            urban_or_rural = self.urban_or_rural(full_name, district_code)
+            urban_or_rural = self.urban_or_rural(full_name, code)
 
             merged_name = self.merge_commune_names(
                 partial_name, full_name, code)
@@ -324,6 +412,73 @@ class Sejm2015Preprocessing(BasePreprocessing):
 
     def _preprocess_obwody(self):
         self.target_db.create_table("obwody")
+
+        obwody = self.source_db["obwody"].find({})
+        obwody_completion = self.source_db["obwody_uzupełnienie"].find({})
+
+        code_to_obwod_dict = {
+            (record["commune_code"], record["polling_district_number"]): _id
+            for _id, record in obwody_completion.items()
+        }
+
+        gmina_code_to_id_dict = {
+            code: _id
+            for _id, code in self.target_db["gminy"].find(
+                query={}, fields=["_id", "code"])
+        }
+
+        for ob in obwody.values():
+            # get basic data
+            constituency_number = ob["constituency_number"]
+            senate_constituency_number = ob["senate_constituency_number"]
+            commune_code = ob["commune_code"]
+            commune_name = ob["commune_name"]
+            polling_district_number = ob["polling_district_number"]
+            full_address = ob["full_address"]
+            voters = ob["voters"]
+
+            # get completion data
+            obwod_identifier = (commune_code, polling_district_number)
+            ob_compl_id = code_to_obwod_dict[obwod_identifier]
+            ob_compl = obwody_completion[ob_compl_id]
+
+            completion_commune_name = ob_compl["commune_name"]
+            commission_name = ob_compl.get("commission_name", "")
+
+            # check name of commune
+            if completion_commune_name != commune_name:
+                raise ValueError(
+                    f"Problem with commune name: {commune_name}"
+                    f" / {completion_commune_name}, code: {commune_code}")
+
+            # check name and address of commission
+            try:
+                name, address = self.parse_commission_address(
+                    full_address, commission_name, obwod_identifier)
+            except ValueError as e:
+                print(e)
+                print(f"---Problem with commission name and address:\n"
+                      f"{full_address}\n"
+                      f"{commission_name}\n"
+                      f"{commune_code}\n"
+                      f"{polling_district_number}\n")
+                name, address = commission_name, full_address
+
+            # preprocess additional data
+            commune_id = gmina_code_to_id_dict[commune_code]
+            urban_or_rural = self.urban_or_rural(commune_name, commune_code)
+
+            # add record
+            self.target_db["obwody"].put({
+                "constituency": constituency_number,
+                "gmina": commune_id,
+                "number": polling_district_number,
+                "commission_name": name,
+                "address": address,
+                "senate_constituency_number": senate_constituency_number,
+                "urban_or_rural": urban_or_rural,
+                "voters": voters,
+            })
 
     def _preprocess_lists(self):
         self.target_db.create_table("listy")
