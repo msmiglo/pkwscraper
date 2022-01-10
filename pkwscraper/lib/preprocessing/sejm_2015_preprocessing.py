@@ -481,9 +481,88 @@ class Sejm2015Preprocessing(BasePreprocessing):
             })
 
     def _preprocess_protocoles(self):
-        return
-        raise NotImplementedError("Tych jeścio ni mo!")
         self.target_db.create_table("protokoły")
+        obwody_data = self.source_db["obwody"].find({})
+
+        for o in obwody_data.values():
+            # get identifier of polling district
+            commune_code = o["commune_code"]
+            polling_district_number = o["polling_district_number"]
+
+            # TODO - MAKE DICT IN MAIN METHOD SCOPE
+            commune_id = self.target_db["gminy"].find_one(
+                query={"code": commune_code}, fields="_id")
+            obwod_id = self.target_db["obwody"].find_one(
+                query={
+                    "gmina": commune_id,
+                    "number": polling_district_number
+                },
+                fields="_id"
+            )
+
+            # get data
+            voters = o["voters"]
+            got_ballots = o["got_ballots"]
+            unused_ballots = o["unused_ballots"]
+            given_ballots = o["given_ballots"]
+            proxy_voters = o["proxy_voters"]
+            certificate_voters = o["certificate_voters"]
+            voting_packets = o["voting_packets"]
+            return_envelopes = o["return_envelopes"]
+            envelopes_without_statement = o["envelopes_without_statement"]
+            unsigned_statement = o["unsigned_statement"]
+            without_voting_envelope = o["without_voting_envelope"]
+            unseeled_voting_envelopes = o["unseeled_voting_envelopes"]
+            envelopes_accepted = o["envelopes_accepted"]
+            ballots_from_box = o["ballots_from_box"]
+            envelopes_from_ballot_box = o["envelopes_from_ballot_box"]
+            ballots_invalid = o["ballots_invalid"]
+            ballots_valid = o["ballots_valid"]
+            votes_invalid = o["votes_invalid"]
+            invalid_2_candidates = o["invalid_2_candidates"]
+            invalid_no_vote = o["invalid_no_vote"]
+            invalid_candidate = o["invalid_candidate"]
+            votes_valid = o["votes_valid"]
+
+            # check correctness
+            if got_ballots != unused_ballots + given_ballots:
+                print("ballots", commune_code, polling_district_number)
+            assert ballots_from_box == ballots_invalid + ballots_valid, \
+                ("ballots taken", commune_code, polling_district_number)
+            assert votes_valid + votes_invalid + ballots_invalid == ballots_from_box, \
+                ("votes", commune_code, polling_district_number)
+            assert votes_invalid >= invalid_2_candidates + invalid_no_vote + invalid_candidate, \
+                ("invalid votes", commune_code, polling_district_number)
+            if return_envelopes != envelopes_without_statement + unsigned_statement \
+                + without_voting_envelope + unseeled_voting_envelopes + envelopes_accepted:
+                print("envelopes", commune_code, polling_district_number)
+
+            # add new record
+            self.target_db["obwody"].put({
+                "obwod": obwod_id,
+                "voters": voters,
+                "got_ballots": got_ballots,
+                "unused_ballots": unused_ballots,
+                "given_ballots": given_ballots,
+                "proxy_voters": proxy_voters,
+                "certificate_voters": certificate_voters,
+                "voting_packets": voting_packets,
+                "return_envelopes": return_envelopes,
+                "envelopes_without_statement": envelopes_without_statement,
+                "unsigned_statement": unsigned_statement,
+                "without_voting_envelope": without_voting_envelope,
+                "unseeled_voting_envelopes": unseeled_voting_envelopes,
+                "envelopes_accepted": envelopes_accepted,
+                "ballots_from_box": ballots_from_box,
+                "envelopes_from_ballot_box": envelopes_from_ballot_box,
+                "ballots_invalid": ballots_invalid,
+                "ballots_valid": ballots_valid,
+                "votes_invalid": votes_invalid,
+                "invalid_2_candidates": invalid_2_candidates,
+                "invalid_no_vote": invalid_no_vote,
+                "invalid_candidate": invalid_candidate,
+                "votes_valid": votes_valid,
+            })
 
     def _preprocess_lists(self):
         self.target_db.create_table("listy")
@@ -596,6 +675,50 @@ class Sejm2015Preprocessing(BasePreprocessing):
     def _preprocess_mandates(self):
         self.target_db.create_table("mandaty")
 
+        mandates = self.source_db["mandaty"].find({})
+
+        # iterate records
+        for m in mandates.values():
+            # get data
+            constituency_number = m["constituency_number"]
+            list_number = m["list_number"]
+            position = m["position"]
+            committee_name = m["committee_name"]
+            candidate_name = m["full_name"]
+
+            # clean texts
+            committee_name = self.clean_text(committee_name)
+            candidate_name = self.clean_text(candidate_name)
+            first_name, surname = candidate_name.split(maxsplit=1)
+
+            # get relations
+            constituency_id = self.target_db["okręgi"].find_one(
+                query={"number": constituency_number}, fields="_id")
+            list_id = self.target_db["listy"].find_one(
+                query={
+                    "list_number": list_number,
+                    "committee_name": committee_name
+                },
+                fields="_id"
+            )
+
+            # find candidate
+            candidate_id, candidate_record = self.target_db["kandydaci"] \
+                .find_one({
+                    "constituency": constituency_id,
+                    "list": list_id,
+                    "position": position,
+                })
+
+            # check correctness
+            assert candidate_record["names"].startswith(first_name)
+            assert candidate_record["surname"] == surname
+
+            # add record
+            self.target_db["mandaty"].put({"candidate": candidate_id})
+
+        # check number of mandates
+        assert len(self.target_db["mandaty"].find({})) == 460
 
 
     '''
