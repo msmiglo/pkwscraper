@@ -126,9 +126,9 @@ class Sejm2015Preprocessing(BasePreprocessing):
         self._preprocess_gminy()
         self._scale_shapes()
         self._preprocess_obwody()
+        self._preprocess_protocoles()
         self._preprocess_lists()
         self._preprocess_candidates()
-        self._preprocess_protocoles()
         self._preprocess_votes()
         self._preprocess_mandates()
 
@@ -480,16 +480,113 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 "voters": voters,
             })
 
-    def _preprocess_lists(self):
-        self.target_db.create_table("listy")
-
-    def _preprocess_candidates(self):
-        self.target_db.create_table("kandydaci")
-
     def _preprocess_protocoles(self):
         return
         raise NotImplementedError("Tych jeścio ni mo!")
         self.target_db.create_table("protokoły")
+
+    def _preprocess_lists(self):
+        self.target_db.create_table("listy")
+
+        lists_data = self.source_db["kandydaci"].find(
+            query={}, fields=["list_number", "committee_name"])
+        lists_dict = {
+            self.clean_text(committee_name): list_number
+            for list_number, committee_name in lists_data
+        }
+
+        committees = self.source_db["komitety"].find({})
+
+        for c in committees.values():
+            committee_number = c["number"]
+            committee_symbol = c["signature"]
+            committee_type = c["type"]
+            committee_name = c["name"]
+            committee_shortname = c.get("shortname", "")
+            sejm_candidates = c["sejm_candidates"]
+            senat_candidates = c["senat_candidates"]
+            committee_status = c["status"]
+
+            committee_name = self.clean_text(committee_name)
+            committee_shortname = self.clean_text(committee_shortname)
+
+            if committee_name not in lists_dict:
+                continue
+
+            list_number = lists_dict[committee_name]
+
+            self.target_db["listy"].put({
+                "committee_number": committee_number,
+                "committee_type": committee_type,
+                "committee_name": committee_name,
+                "committee_shortname": committee_shortname,
+                "committee_symbol": committee_symbol,
+                "committee_status": committee_status,
+                "list_number": list_number,
+            })
+
+    def _preprocess_candidates(self):
+        candidates = self.source_db["kandydaci"].find({})
+        self.target_db.create_table("kandydaci")
+
+        for c in candidates.values():
+            # get values
+            constituency_number = c["okreg_number"]
+            list_number = c["list_number"]
+            committee_name = c["committee_name"]
+            position = c["position"]
+            surname = c["surname"]
+            names = c["names"]
+            gender = c["gender"]
+            residence = c["residence"]
+            occupation = c["occupation"]
+            party = c["party"]
+
+            # clean data
+            surname = self.clean_text(surname)
+            names = self.clean_text(names)
+            first_name = names.split(maxsplit=1)[0]
+            first_name = self.clean_text(first_name)
+            committee_name = self.clean_text(committee_name)
+            residence = self.clean_text(residence)
+            occupation = self.clean_text(occupation)
+            party = self.clean_text(party)
+
+            # get constituency id
+            constituency_id = self.target_db["okręgi"].find_one(
+                query={"number": constituency_number}, fields="_id")
+
+            # get list id
+            list_id, other_list_number = self.target_db["listy"].find_one(
+                query={"committee_name": committee_name},
+                fields=["_id", "list_number"]
+            )
+
+            # check data correctness
+            if not other_list_number == list_number:
+                print(f"constituency: `{constituency_number}`")
+                raise ValueError(
+                    f"non-matching list number for committee"
+                    f" `{committee_name}`:\n"
+                    f"\t{list_number} / {other_list_number}\n"
+                    f"constituency: {constituency_number}\n"
+                )
+            if gender not in "KM":
+                raise ValueError(f"Wrong gender symbol: `{gender}`")
+
+            # add record
+            self.target_db["kandydaci"].put({
+                "constituency": constituency_id,
+                "list": list_id,
+                "position": position,
+                "surname": surname,
+                "names": names,
+                "first_name": first_name,
+                "gender": gender,
+                "residence": residence,
+                "occupation": occupation,
+                "party": party,
+            })
 
     def _preprocess_votes(self):
         return
