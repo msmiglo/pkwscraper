@@ -525,20 +525,20 @@ class Sejm2015Preprocessing(BasePreprocessing):
             votes_valid = o["votes_valid"]
 
             # check correctness
-            if got_ballots != unused_ballots + given_ballots:
-                print("ballots", commune_code, polling_district_number)
             assert ballots_from_box == ballots_invalid + ballots_valid, \
                 ("ballots taken", commune_code, polling_district_number)
             assert votes_valid + votes_invalid + ballots_invalid == ballots_from_box, \
                 ("votes", commune_code, polling_district_number)
             assert votes_invalid >= invalid_2_candidates + invalid_no_vote + invalid_candidate, \
                 ("invalid votes", commune_code, polling_district_number)
+            if got_ballots != unused_ballots + given_ballots:
+                print("ballots", commune_code, polling_district_number)
             if return_envelopes != envelopes_without_statement + unsigned_statement \
                 + without_voting_envelope + unseeled_voting_envelopes + envelopes_accepted:
                 print("envelopes", commune_code, polling_district_number)
 
             # add new record
-            self.target_db["obwody"].put({
+            self.target_db["protokoły"].put({
                 "obwod": obwod_id,
                 "voters": voters,
                 "got_ballots": got_ballots,

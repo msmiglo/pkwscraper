@@ -22,28 +22,28 @@ id, constituency, list, position, surname, names, gender, residence, occupation,
 protoko³y:
 id, obwod, 
 
-Liczba wyborców
-Otrzymane karty
-Niewykorzystane karty
-Wydane karty
-Liczba wyborców g³osuj¹cych przez pe³nomocnika
-Liczba wyborców g³osuj¹cych na podstawie zaœwiadczenia
-Pakiety wyborcze
-Koperty zwrotne
-Koperty  bez oœwiadczenia
-Niepodpisane oœwiadczenie
-Koperty zwrotne bez koperty na kartê do g³osowania
-Niezaklejona koperta na kartê do g³osowania
-Koperty na kartê do g³osowania wrzucone do urny
-Karty wyjête z urny
-Karty wyjête z kopert na karty do g³osowania
-Karty niewa¿ne
-Karty wa¿ne
-G³osy niewa¿ne
-w tym: z powodu postawienia znaku „X” obok nazwiska dwóch lub wiêkszej liczby kandydatów z ró¿nych list
-w tym: z powodu niepostawienia znaku „X” obok nazwiska ¿adnego kandydata
-w tym: z powodu postawienia znaku „x” wy³¹cznie obok nazwiska kandydata z listy, której rejestracja zosta³a uniewa¿niona
-G³osy wa¿ne
+voters				(Liczba wyborców)
+got_ballots			(Otrzymane karty)
+unused_ballots			(Niewykorzystane karty)
+given_ballots			(Wydane karty)
+proxy_voters			(Liczba wyborców g³osuj¹cych przez pe³nomocnika)
+certificate_voters		(Liczba wyborców g³osuj¹cych na podstawie zaœwiadczenia)
+voting_packets			(Pakiety wyborcze)
+return_envelopes		(Koperty zwrotne)
+envelopes_without_statement	(Koperty  bez oœwiadczenia)
+unsigned_statement		(Niepodpisane oœwiadczenie)
+without_voting_envelope		(Koperty zwrotne bez koperty na kartê do g³osowania)
+unseeled_voting_envelopes	(Niezaklejona koperta na kartê do g³osowania)
+envelopes_accepted		(Koperty na kartê do g³osowania wrzucone do urny)
+ballots_from_box		(Karty wyjête z urny)
+envelopes_from_ballot_box	(Karty wyjête z kopert na karty do g³osowania)
+ballots_invalid			(Karty niewa¿ne)
+ballots_valid			(Karty wa¿ne)
+votes_invalid			(G³osy niewa¿ne)
+invalid_2_candidates		(w tym: z powodu postawienia znaku „X” obok nazwiska dwóch lub wiêkszej liczby kandydatów z ró¿nych list)
+invalid_no_vote			(w tym: z powodu niepostawienia znaku „X” obok nazwiska ¿adnego kandydata)
+invalid_candidate		(w tym: z powodu postawienia znaku „x” wy³¹cznie obok nazwiska kandydata z listy, której rejestracja )(zosta³a uniewa¿niona)
+votes_valid			(G³osy wa¿ne)
 
 
 wyniki g³osowania (voting results):
