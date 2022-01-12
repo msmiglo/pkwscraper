@@ -1,0 +1,8 @@
+Województwo - Voivodship
+Powiat - District
+Gmina - Commune
+Obwód - Polling District
+Dzielnica - City-District
+Okręg - Constituency
+
+NOTE - in some cases both versions can be used in code, filenames or docstrings for convenience or clarity. The names are taken mostly from English version of an official PKW website.

@@ -2,7 +2,7 @@
 from unittest import main, skip, TestCase
 from unittest.mock import call, MagicMock, patch
 
-from pkwscraper.lib.utilities import get_parent_code
+from pkwscraper.lib.utilities import get_parent_code, Region
 
 
 class TestGetParentCode(TestCase):
@@ -90,6 +90,61 @@ class TestGetParentCode(TestCase):
             result = get_parent_code(input_code)
             self.assertEqual(result, expected)
             self.assertIs(type(result), type(expected))
+
+
+# TODO: move it to lib classes tests maybe
+class TestRegion(TestCase):
+    """
+    - test init
+    - test load from svg
+    - test save to json
+    - test load from json
+    - test filling_boundaries_line
+    - test contour_lines
+    """
+    def setUp(self):
+        self.geo_txt = (
+            "    M9.2,3l2,0l2,2l0,2l-2,2l-2,0l-2-2l0-2l2-2L9.2,3"
+            "    M12,5.4l1,0l1,1l0,1l-1,1l-1,0l-1-1l0-1l1-1L12,5.4"
+            "    M11,7l-1,1l0,1l1,1l2-1l0-1l-1-1l-1,0L11,7"
+            "    M10,6l-1,1l0,1l1,1l2-1l0-1l-1-1l-1,0L10,6    "
+        )
+
+    def tearDown(self):
+        pass
+
+    @skip
+    def test_init(self):
+        input_ = ""
+        with self.assertRaises(ValueError):
+            (input_)
+
+    def test_load_from_svg(self):
+        reg = Region.from_svg_d(self.geo_txt)
+
+    @skip
+    def test_save_to_json(self):
+        input_ = ""
+        with self.assertRaises(ValueError):
+            (input_)
+
+    @skip
+    def test_load_from_json(self):
+        input_ = ""
+        with self.assertRaises(ValueError):
+            (input_)
+
+    @skip
+    def test_filling_boundaries_line(self):
+        input_ = ""
+        with self.assertRaises(ValueError):
+            (input_)
+
+    @skip
+    def test_contour_lines(self):
+        input_ = ""
+        with self.assertRaises(ValueError):
+            (input_)
 
 
 if __name__ == "__main__":

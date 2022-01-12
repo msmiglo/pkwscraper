@@ -1,4 +1,11 @@
 
+from decimal import Decimal
+import json
+
+import svg.path
+from svg.path import parse_path
+#from svg.path import Path
+
 """
 EXPLANATION OF TERRITORY CODES:
 
@@ -85,3 +92,190 @@ def _get_parent_code_str(code_str):
     parent_int = _get_parent_code_int(code_int)
     parent_str = str(parent_int)
     return parent_str
+
+
+"""
+EXPLANATION OF GEO/REGION DATA:
+
+geo - description of region as accepted by "d" attribute in "svg" HTML tag
+region - set of shapes that make up the whole region, may contain separate
+    shapes
+shape - a single compact area, can have holes, it is represented by non
+    crossing curves: the first curve defines the outer boundary, and the
+    latter ones define boundaries of possible holes in it
+curve - set of points that defines the closed polygon contour consisting of
+    segments, the last point does not need to be equal to the first one
+point - a pair of 2 numbers representing x and y coordinates
+number - single coordinate, especially in the geo str where numbers are not
+    divided into single-point-pairs
+
+The data is stored in list of lists, 4 levels deep:
+region = [shapes]
+shape = [curves]
+curve = [points]
+point = [x, y]
+"""
+
+# TODO: move it to separate module in lib classes maybe
+class Region:
+    def __init__(self, region_data):
+        pass
+
+    @staticmethod
+    def _get_line_start(line):
+        start = line.start
+        x, y = start.real, start.imag
+        x = Decimal(str(round(x, 8)))
+        y = Decimal(str(round(y, 8)))
+        return (x, y)
+
+    @classmethod
+    def from_svg_d(cls, geo_txt):
+        """
+        Load from text as in d attribute of svg HTML tag.
+        """
+        # now:
+        # - parse
+        path = parse_path(geo_txt)
+        # - split curves
+        shapes = []
+        for elem in path:
+            print(elem)
+        # - omit repetition of first point
+        # - do not check orientation for now
+        # - assert end equals start
+
+        # TODO:
+        # use decimal to store numbers
+        # iterate over curves
+        # read orientation of first curve
+        # if next curve has opposite orientation - it is a hole
+        # if next curve has same orientation as first - it is new shape
+
+
+
+        return
+        curves = []
+        curve = []
+        for elem in path:
+            if isinstance(elem, svg.path.path.Move):
+                curves.append(curve)
+                curve = []
+            else:
+                assert isinstance(elem, svg.path.path.Line)
+                curve.append(elem)
+        curves.append(curve)
+        curves = curves[1:]
+        curves = [[_line_to_point(line) for line in curve] for curve in curves]
+        return curves
+
+        data = geo
+        return cls(data)
+
+    @classmethod
+    def from_json(cls, text):
+        """
+        Load from JSON.
+        - text: str/bytes - raw content of json
+        """
+        data = text
+        return cls(data)
+
+    def json(self):
+        """ Serialize to JSON. """
+        pass
+
+    @property
+    def filling_boundaries_line(self):
+        """
+        Get single line that defines region area with possible holes
+        and separate shapes. This contains segments that join shapes
+        and holes, so it is NOT suitable to draw contour of region.
+        """
+        pass
+
+    @property
+    def contour_lines(self):
+        """
+        Get set of lines that defines edge of region with possible holes
+        and separate shapes. This does NOT contain segments that join
+        separate shapes, so it IS suitable to draw contour of region.
+        """
+        pass
+
+
+
+"""
+OLD CODE:
+
+
+
+def _line_to_point(line):
+    start = line.start
+    return (start.real, start.imag)
+
+
+def geo_to_region(map_str):
+    path = parse_path(map_str)
+    curves = []
+    curve = []
+    for elem in path:
+        if isinstance(elem, svg.path.path.Move):
+            curves.append(curve)
+            curve = []
+        else:
+            assert isinstance(elem, svg.path.path.Line)
+            curve.append(elem)
+    curves.append(curve)
+    curves = curves[1:]
+    curves = [[_line_to_point(line) for line in curve] for curve in curves]
+    return curves
+
+
+# --------------- OLD APPROACH ---------------
+def _split_part_by_minuses(part_str):
+    if "-" not in part_str:
+        return [part_str]
+    numbers = part_str.split("-")
+    numbers = [numbers[0]] + ["-" + num for num in numbers[1:]]
+    numbers = list(filter(None, numbers))
+    return numbers
+
+
+def _resolve_points(line_str):
+    parts = line_str.split(" ")
+    parts = [part.strip() for part in parts]
+    numbers = []
+    for part_i in parts:
+        numbers += _split_part_by_minuses(part_i)
+    numbers = [int(num) for num in numbers]
+    x_coords = numbers[0::2]
+    y_coords = numbers[1::2]
+    points = list(zip(x_coords, y_coords))
+    return points
+
+
+def geo_to_region_2(map_str):
+    # TODO: finish
+    lines = []
+    chars = "".join(sorted(set(map_str) - set("0123456789- ")))
+    assert chars == "LMZ", chars
+    #print()
+    #print('----------------------')
+    #print(map_str)
+    lines = map_str.split("Z")
+    lines = list(filter(None, lines))
+    # TODO - split by Z, then remove L, split by space,
+    #   then by minus, but retrieve it, stack in pairs
+    #print()
+    #print(lines)
+    lines = [line.strip("ML ").replace(" L ", " ") for line in lines]
+    #print()
+    #print(lines)
+    lines = [_resolve_points(line_str) for line_str in lines]
+    #print()
+    #print(lines)
+    #print(list(len(lin) for lin in lines))
+    #print()
+    return lines
+"""

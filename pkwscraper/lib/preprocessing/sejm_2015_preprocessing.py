@@ -10,7 +10,7 @@ import json
 
 from pkwscraper.lib.dbdriver import DbDriver
 from pkwscraper.lib.preprocessing.base_preprocessing import BasePreprocessing
-from pkwscraper.lib.utilities import get_parent_code
+from pkwscraper.lib.utilities import get_parent_code, Region
 
 
 ELECTION_TYPE = "sejm"
@@ -18,96 +18,6 @@ YEAR = 2015
 RAW_DATA_DIRECTORY = "./pkwscraper/data/raw/sejm/2015/"
 RESCRIBED_DATA_DIRECTORY = "./pkwscraper/data/rescribed/sejm/2015/"
 PREPROCESSED_DATA_DIRECTORY = "./pkwscraper/data/preprocessed/sejm/2015/"
-
-
-class Region:
-    # TODO - PROBABLY MOVE TO UTILITIES.
-    def __init__(self, data):
-        pass
-
-    @classmethod
-    def from_svg_d(cls, geo):
-        data = geo
-        return cls(data)
-
-    @classmethod
-    def from_json(cls, text):
-        """
-        Load from JSON.
-        - text: str/bytes - raw content of json
-        """
-        data = text
-        return cls(data)
-
-    def json(self):
-        """ Serialize to JSON. """
-        pass
-
-    @property
-    def get_filling_boundary(self):
-        """
-        Get single line that defines region area with possible holes
-        and separate shapes. This contains segments that join shapes
-        and holes, so it is NOT suitable to draw contour of region.
-        """
-        pass
-
-    @property
-    def contour_lines(self):
-        """
-        Get set of lines that defines edge of region with possible holes
-        and separate shapes. This does NOT contain segments that join
-        separate shapes, so it IS suitable to draw contour of region.
-        """
-        pass
-
-    """
-    EXPLANATION OF GEO/REGION DATA:
-
-    geo - this is the description of region as accepted by "d" attribute
-        in "svg" HTML tag
-    region - set of lines that are boundaries to region
-    line - represents a closed curve, a list of points, last point is not
-        needed to be equal to the first point
-    part - is a part of line str, which consists of many numbers, but which
-        are not separated by spaces - it is possible when numbers are negative,
-        then the minus is indicating the start of new number
-    point - a tuple of 2 numbers representing x and y coordinate
-    number - single coordinate, especially when manipulation the geo str
-        where numbers are not divided into pairs for single points
-    """
-
-    @staticmethod
-    def _line_to_point(line):
-        start = line.start
-        return (start.real, start.imag)
-
-    @staticmethod
-    def geo_to_region(map_str):
-        path = parse_path(map_str)
-        curves = []
-        curve = []
-        for elem in path:
-            if isinstance(elem, svg.path.path.Move):
-                curves.append(curve)
-                curve = []
-            else:
-                assert isinstance(elem, svg.path.path.Line)
-                curve.append(elem)
-        curves.append(curve)
-        curves = curves[1:]
-        curves = [[_line_to_point(line) for line in curve] for curve in curves]
-        return curves
-
-    @staticmethod
-    def geo_to_region(geo):
-        """
-        dataset = [regions]
-        region = [curves]
-        curve = [points]
-        point = [x, y]
-        """
-        pass
 
 
 class Sejm2015Preprocessing(BasePreprocessing):
@@ -120,6 +30,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
         print("DB opened.")
 
     def run_all(self):
+        print()
         self._preprocess_voivodships()
         self._preprocess_okregi()
         self._preprocess_powiaty()
@@ -131,6 +42,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
         self._preprocess_candidates()
         self._preprocess_votes()
         self._preprocess_mandates()
+        print()
 
         print("dumping DB tables...")
         self.target_db.dump_tables()
@@ -234,14 +146,14 @@ class Sejm2015Preprocessing(BasePreprocessing):
             modifier = clean_text(modifier)
             name += " (" + modifier
 
-        # # print information about malformed commission name
-        # if not name.startswith(commission_name):
-        #     commune_code, polling_district_number = obwod_identifier
-        #     print(f"Probable typo in commision name:\n"
-        #           f"{name}\n"
-        #           f"{commission_name}\n"
-        #           f"commune code {commune_code}, polling district no. "
-        #           f"{polling_district_number}\n")
+        # print information about malformed commission name
+        if not name.startswith(commission_name):
+            commune_code, polling_district_number = obwod_identifier
+            print(f"Probable typo in commision name:\n"
+                  f"{name}\n"
+                  f"{commission_name}\n"
+                  f"commune code {commune_code}, polling district no. "
+                  f"{polling_district_number}\n")
 
         return name, address
 
@@ -408,6 +320,11 @@ class Sejm2015Preprocessing(BasePreprocessing):
             })
 
     def _scale_shapes(self):
+        # convert geo strings
+        # scale voivodships
+        # scale okregi
+        # scale powiaty
+        # scale gminy
         pass
 
     def _preprocess_obwody(self):
@@ -484,21 +401,25 @@ class Sejm2015Preprocessing(BasePreprocessing):
         self.target_db.create_table("protokoły")
         obwody_data = self.source_db["obwody"].find({})
 
+        # create index for communes and polling districts IDs
+        commune_dict = {commune_code: commune_id for commune_code, commune_id
+            in self.target_db["gminy"].find(query={}, fields=["code", "_id"])}
+        obwod_dict = {
+            (commune_id, obwod_number): obwod_id
+            for commune_id, obwod_number, obwod_id
+            in self.target_db["obwody"].find(
+                query={},
+                fields=["gmina", "number", "_id"]
+            )
+        }
+
+        # iterate records
         for o in obwody_data.values():
             # get identifier of polling district
             commune_code = o["commune_code"]
             polling_district_number = o["polling_district_number"]
-
-            # TODO - MAKE DICT IN MAIN METHOD SCOPE
-            commune_id = self.target_db["gminy"].find_one(
-                query={"code": commune_code}, fields="_id")
-            obwod_id = self.target_db["obwody"].find_one(
-                query={
-                    "gmina": commune_id,
-                    "number": polling_district_number
-                },
-                fields="_id"
-            )
+            commune_id = commune_dict[commune_code]
+            obwod_id = obwod_dict[(commune_id, polling_district_number)]
 
             # get data
             voters = o["voters"]
@@ -526,16 +447,16 @@ class Sejm2015Preprocessing(BasePreprocessing):
 
             # check correctness
             assert ballots_from_box == ballots_invalid + ballots_valid, \
-                ("ballots taken", commune_code, polling_district_number)
+                ("miscounted ballots taken", commune_code, polling_district_number)
             assert votes_valid + votes_invalid + ballots_invalid == ballots_from_box, \
-                ("votes", commune_code, polling_district_number)
+                ("miscounted votes", commune_code, polling_district_number)
             assert votes_invalid >= invalid_2_candidates + invalid_no_vote + invalid_candidate, \
-                ("invalid votes", commune_code, polling_district_number)
+                ("miscounted invalid votes", commune_code, polling_district_number)
             if got_ballots != unused_ballots + given_ballots:
-                print("ballots", commune_code, polling_district_number)
+                print(f"miscounted ballots: obwód {commune_code}/{polling_district_number}", end="; ")
             if return_envelopes != envelopes_without_statement + unsigned_statement \
                 + without_voting_envelope + unseeled_voting_envelopes + envelopes_accepted:
-                print("envelopes", commune_code, polling_district_number)
+                print(f"miscounted envelopes: obwód {commune_code}/{polling_district_number}", end="; ")
 
             # add new record
             self.target_db["protokoły"].put({
@@ -563,6 +484,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 "invalid_candidate": invalid_candidate,
                 "votes_valid": votes_valid,
             })
+        print()
 
     def _preprocess_lists(self):
         self.target_db.create_table("listy")
