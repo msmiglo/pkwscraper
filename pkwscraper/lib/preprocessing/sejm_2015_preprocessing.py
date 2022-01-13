@@ -205,6 +205,12 @@ class Sejm2015Preprocessing(BasePreprocessing):
         raise ValueError(
             f"Problem with names: {full_name} / {partial_name}, code={code}.")
 
+    @staticmethod
+    def _parse_geo(geo_txt):
+        region = Region.from_svg_d(geo_txt)
+        jsoned_txt = region.json()
+        return jsoned_txt
+
     def _preprocess_voivodships(self):
         voivodships = self.source_db["województwa"].find({})
         self.target_db.create_table("województwa")
@@ -217,7 +223,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
             self.target_db["województwa"].put({
                 "code": code,
                 "name": name,
-                "geo": geo,
+                "geo": self._parse_geo(geo),
             })
 
     def _preprocess_okregi(self):
@@ -239,7 +245,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 "headquarters": headquarters,
                 "voivodship": voivod_id,
                 "mandates": mandates,
-                "geo": geo,
+                "geo": self._parse_geo(geo),
             })
 
     def _preprocess_powiaty(self):
@@ -265,7 +271,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
             district_id = self.target_db["powiaty"].put({
                 "code": code,
                 "name": name,
-                "geo": geo,
+                "geo": self._parse_geo(geo),
                 "parent": voivod_id,
             })
 
@@ -315,7 +321,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 "code": code,
                 "name": merged_name,
                 "urban_or_rural": urban_or_rural,
-                "geo": geo,
+                "geo": self._parse_geo(geo),
                 "parent": district_id,
             })
 

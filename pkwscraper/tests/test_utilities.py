@@ -215,7 +215,7 @@ class TestRegion(TestCase):
     def test_filling_boundaries_line(self):
         region = Region(self.region_data)
         line = region.filling_boundaries_line
-        self.assertEqual(len(line), 30)
+        self.assertEqual(len(line), 34)
 
     def test_contour_lines(self):
         region = Region(self.region_data)

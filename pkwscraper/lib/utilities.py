@@ -151,15 +151,17 @@ class Region:
                 continue
             else:
                 # add point to curve
-                assert isinstance(elem, svg.path.path.Line)
+                assert isinstance(
+                    elem, (svg.path.path.Line, svg.path.path.Close)
+                ), (elem, type(elem))
                 point = Region._get_line_start(elem)
                 curve = shape[-1]
                 curve.append(point)
 
         # remove repeating point
         for curve in shape:
-            last_point = curve.pop()
-            assert last_point == curve[0], ("problem A:", curve, last_point)
+            if curve[-1] == curve[0]:
+                curve.pop()
 
         # create data and object
         region_data = [shape]
@@ -208,6 +210,8 @@ class Region:
             for curve in shape:
                 for point in curve:
                     points.append(list(point))
+                start_point = curve[0]
+                points.append(list(start_point))
         return points
 
     @property
@@ -220,5 +224,6 @@ class Region:
         lines = []
         for shape in self.data:
             for curve in shape:
-                lines.append(list(curve))
+                new_curve = list(curve) + [curve[0]]
+                lines.append(new_curve)
         return lines
