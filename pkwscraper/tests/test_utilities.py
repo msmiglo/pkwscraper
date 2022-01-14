@@ -146,7 +146,7 @@ class TestRegion(TestCase):
             "    M11,7l-1,1l0,1l1,1l2-1l0-1l-1-1l-1,0L11,7"
             "    M10,6l-1,1l0,1l1,1l2-1l0-1l-1-1l-1,0L10,6    "
         )
-        x_min = 7.2
+        x_min = Decimal("7.2")
         x_max = 14
         y_min = 3
         y_max = 10

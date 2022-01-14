@@ -4,7 +4,6 @@ import json
 
 import svg.path
 from svg.path import parse_path
-#from svg.path import Path
 
 """
 EXPLANATION OF TERRITORY CODES:
@@ -227,3 +226,18 @@ class Region:
                 new_curve = list(curve) + [curve[0]]
                 lines.append(new_curve)
         return lines
+
+    def get_xy_range(self):
+        xs = [point[0] for shape in self.data
+              for curve in shape for point in curve]
+        ys = [point[1] for shape in self.data
+              for curve in shape for point in curve]
+        x_min = min(xs)
+        x_max = max(xs)
+        y_min = min(ys)
+        y_max = max(ys)
+        return {
+            "x": (x_min, x_max), "y": (y_min, y_max),
+            "min": (x_min, y_min), "max": (x_max, y_max),
+            "x_min": x_min, "x_max": x_max, "y_min": y_min, "y_max": y_max
+        }
