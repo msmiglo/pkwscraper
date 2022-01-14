@@ -104,6 +104,7 @@ class TestRegion(TestCase):
     - test load from json
     - test filling_boundaries_line
     - test contour_lines
+    - test xy range
     """
     def setUp(self):
         region_data = [[
@@ -145,6 +146,15 @@ class TestRegion(TestCase):
             "    M11,7l-1,1l0,1l1,1l2-1l0-1l-1-1l-1,0L11,7"
             "    M10,6l-1,1l0,1l1,1l2-1l0-1l-1-1l-1,0L10,6    "
         )
+        x_min = 7.2
+        x_max = 14
+        y_min = 3
+        y_max = 10
+        self.xy_range = {
+            "x": (x_min, x_max), "y": (y_min, y_max),
+            "min": (x_min, y_min), "max": (x_max, y_max),
+            "x_min": x_min, "x_max": x_max, "y_min": y_min, "y_max": y_max
+        }
 
     def tearDown(self):
         pass
@@ -221,6 +231,11 @@ class TestRegion(TestCase):
         region = Region(self.region_data)
         lines = region.contour_lines
         self.assertEqual(len(lines), 4)
+
+    def test_xy_range(self):
+        region = Region(self.region_data)
+        xy_range = region.get_xy_range()
+        self.assertDictEqual(xy_range, self.xy_range)
 
 
 if __name__ == "__main__":

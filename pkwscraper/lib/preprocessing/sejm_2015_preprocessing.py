@@ -1,11 +1,4 @@
 
-'''import re
-from zipfile import ZipFile
-
-from lxml import html
-from openpyxl import load_workbook
-import xlrd'''
-
 import json
 
 from pkwscraper.lib.dbdriver import DbDriver
@@ -35,7 +28,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
         self._preprocess_okregi()
         self._preprocess_powiaty()
         self._preprocess_gminy()
-        self._scale_shapes()
+        #self._scale_shapes()
         self._preprocess_obwody()
         self._preprocess_protocoles()
         self._preprocess_lists()
@@ -325,13 +318,13 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 "parent": district_id,
             })
 
-    def _scale_shapes(self):
-        # convert geo strings
+    '''def _scale_shapes(self):
+        # TODO - THIS IS NOT NEEDED
         # scale voivodships
         # scale okregi
         # scale powiaty
         # scale gminy
-        pass
+        pass'''
 
     def _preprocess_obwody(self):
         self.target_db.create_table("obwody")
