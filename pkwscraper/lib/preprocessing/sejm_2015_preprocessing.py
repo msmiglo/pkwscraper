@@ -33,6 +33,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
         self._preprocess_lists()
         self._preprocess_candidates()
         self._preprocess_votes()
+        self._check_votes()
         self._preprocess_mandates()
         print()
 
@@ -483,6 +484,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 "votes_valid": votes_valid,
             })
         print()
+        print()
 
     def _preprocess_lists(self):
         self.target_db.create_table("listy")
@@ -631,34 +633,48 @@ class Sejm2015Preprocessing(BasePreprocessing):
             commune_id = communes_dict[commune_code]
             obwod_id, constituency_id = polling_districts_dict[
                 commune_id, polling_district_number]
+            constituency_number = \
+                self.target_db["okręgi"][constituency_id]["number"]
 
             candidate_full_name = self.clean_text(candidate_full_name)
             names, surname = self.parse_full_name(candidate_full_name)
             candidate_key = constituency_id, surname, names
 
             # check correctness
-            # TODO - votes should be numbers for valid candidates and
-            #   they cannot be valid numbers for invalid candidates
-            '''if candidate_key not in candidates_dict:
-                constituency_number = \
-                    self.target_db["okręgi"][constituency_id]["number"]
+            try:
+                int(votes)
+                votes_ok = True
+            except ValueError:
+                votes_ok = False
+
+            candidate_ok = candidate_key in candidates_dict
+
+            if not candidate_ok and not votes_ok:
                 message = (
-                    f'Problem with candidate: "{candidate_full_name}",'
-                    f' in constituency number {constituency_number}'
+                    f'A1 Problem with candidate: "{candidate_full_name}",'
+                    f' in constituency number {constituency_number},'
+                    f' got votes: {votes} of type: {type(votes)}.'
                 )
                 errors.append(message)
-                if votes:
-                    try:
-                        votes = int(votes)
-                    except:
-                        pass
+                continue
 
-                if isinstance(votes, int) and votes != 0:
-                    message_2 = (
-                        f'votes for invalid candidate {candidate_full_name}'
-                        f' should be 0, got: {votes} of type: {type(votes)}')
-                    errors.append(message_2)
-                continue'''
+            if not votes_ok:
+                message_2 = (
+                    f'A2 Problem with votes: "{candidate_full_name}",'
+                    f' in constituency number {constituency_number},'
+                    f' got votes: {votes} of type: {type(votes)}.'
+                )
+                errors.append(message_2)
+                continue
+
+            if not candidate_ok:
+                message_3 = (
+                    f'A3 Candidate not found: "{candidate_full_name}",'
+                    f' in constituency number {constituency_number},'
+                    f' got votes: {votes} of type: {type(votes)}.'
+                )
+                errors.append(message_3)
+                continue
 
             # get candidate id
             candidate_id = candidates_dict[candidate_key]
@@ -673,6 +689,42 @@ class Sejm2015Preprocessing(BasePreprocessing):
         # print errors
         errors = list(sorted(set(errors)))
         for e in errors:
+            print(e)
+        print()
+
+    def _check_votes(self):
+        # get cross product of polling districts and candidates
+        votes = self.target_db["wyniki"].find(
+            {}, fields=["obwod", "candidate"])
+        product_pairs = {
+            (obwod_id, candidate_id): 1
+            for obwod_id, candidate_id in votes
+        }
+
+        # make list of elements
+        candidates = self.target_db["kandydaci"].find(
+            {}, fields=["_id", "constituency"])
+        districts = self.target_db["obwody"].find(
+            {}, fields=["_id", "constituency"])
+
+        # check all elements
+        errors = []
+        for c_id, c_constituency in candidates:
+            for d_id, d_constituency in districts:
+                if c_constituency == d_constituency:
+                    if (d_id, c_id) not in product_pairs:
+                        error_message = (
+                            f'B1 Problem for polling district: {d_id},'
+                            f' candidate: {c_id},'
+                            f' constituency: {c_constituency}.'
+                        )
+                        errors.append(error_message)
+
+        # print errors
+        errors = list(sorted(set(errors)))
+        if len(errors) > 10:
+            print(len(errors))
+        for e in errors[:100]:
             print(e)
         print()
 
