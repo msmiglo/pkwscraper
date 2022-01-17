@@ -84,6 +84,19 @@ class Table:
         """
         # create new table
         table = cls(read_only=read_only)
+        # NEW VERSION - convert to dict
+        dict_data = df.iloc[:limit].T.to_dict('dict')
+        dict_data = {
+            _id: {
+                name: value
+                for name, value in rec.items()
+                if not pd.isna(value)
+            }
+            for _id, rec in dict_data.items()
+        }
+        table.__data = dict_data
+        '''
+        # TODO - OLD VERSION
         # iterate over records
         i = 0
         for _id, record_ser in df.iterrows():
@@ -93,6 +106,7 @@ class Table:
             record = dict(record_ser.dropna())
             # add the record to table
             table.put(record, _id=_id, _Table__force=True)
+        '''
         return table
 
     def to_df(self):
@@ -136,6 +150,8 @@ class Table:
         if _id is None:
             _id = record_id
         if _id is None:
+            # usign UUID prevents from mistakes when someone choses
+            # records, using ID from another table
             _id = self._make_uuid()
 
         # add record to data
