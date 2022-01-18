@@ -13,9 +13,9 @@ from pkwscraper.lib.scraper.base_scraper import BaseScraper
 
 ELECTION_TYPE = "sejm"
 YEAR = 2015
-RAW_DATA_DIRECTORY = "./pkwscraper/data/raw/sejm/2015/"
-RESCRIBED_DATA_DIRECTORY = "./pkwscraper/data/rescribed/sejm/2015/"
-PREPROCESSED_DATA_DIRECTORY = "./pkwscraper/data/preprocessed/sejm/2015/"
+RAW_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/raw/"
+RESCRIBED_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/rescribed/"
+PREPROCESSED_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/preprocessed/"
 
 
 class Sejm2015Scraper(BaseScraper):
