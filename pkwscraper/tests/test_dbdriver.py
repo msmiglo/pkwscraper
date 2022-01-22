@@ -283,6 +283,7 @@ class TestDbDriver(TestCase):
 
     - test get item
     - test filepath
+    - test read only
     - test create table
     - test delete table
     - test load tables
@@ -365,6 +366,18 @@ class TestDbDriver(TestCase):
         result = DbDriver._filepath(dbdriver, name)
         # assert
         self.assertIn(result, expected)
+
+    def test_read_only(self):
+        """ Unit test """
+        dbdriver = DbDriver.__new__(DbDriver)
+
+        dbdriver._DbDriver__read_only = True
+        self.assertTrue(dbdriver.read_only)
+        dbdriver._DbDriver__read_only = False
+        self.assertFalse(dbdriver.read_only)
+
+        with self.assertRaises(TypeError):
+            dbdriver.read_only()
 
     def test_create_table(self):
         """ Unit test """

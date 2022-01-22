@@ -291,6 +291,10 @@ class DbDriver:
         filepath = os.path.join(self.db_directory, filename)
         return filepath
 
+    @property
+    def read_only(self):
+        return bool(self.__read_only)
+
     @staticmethod
     def _load_csv(filepath):
         try:
