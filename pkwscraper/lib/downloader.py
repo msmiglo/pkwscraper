@@ -30,7 +30,9 @@ class Downloader:
 
         # check if cache directory exists
         if not os.path.isdir(directory):
-            raise IOError("The caching directory does not exist!")
+            print("Creating caching directory.")
+            print()
+            os.makedirs(directory, exist_ok=True)
         self.__local_directory = directory
 
     def download(self, relative_url, force=False):
