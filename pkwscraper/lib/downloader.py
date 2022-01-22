@@ -30,7 +30,7 @@ class Downloader:
 
         # check if cache directory exists
         if not os.path.isdir(directory):
-            print("Creating caching directory.")
+            print(f'Creating caching directory: "{directory}"')
             print()
             os.makedirs(directory, exist_ok=True)
         self.__local_directory = directory
