@@ -8,19 +8,36 @@ from pkwscraper.lib.utilities import get_parent_code, Region
 
 ELECTION_TYPE = "sejm"
 YEAR = 2015
-RAW_DATA_DIRECTORY = "./pkwscraper/data/raw/sejm/2015/"
-RESCRIBED_DATA_DIRECTORY = "./pkwscraper/data/rescribed/sejm/2015/"
-PREPROCESSED_DATA_DIRECTORY = "./pkwscraper/data/preprocessed/sejm/2015/"
+RAW_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/raw/"
+RESCRIBED_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/rescribed/"
+PREPROCESSED_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/preprocessed/"
 
 
 class Sejm2015Preprocessing(BasePreprocessing):
-    def __init__(self):
-        print("opening DB...")
-        # open source DB read only
-        self.source_db = DbDriver(RESCRIBED_DATA_DIRECTORY, read_only=True)
-        # open target DB
-        self.target_db = DbDriver(PREPROCESSED_DATA_DIRECTORY)
-        print("DB opened.")
+    def __init__(self, source_db=None, target_db=None):
+        # source db
+        if source_db is None:
+            print("opening source DB...")
+            source_db = DbDriver(RESCRIBED_DATA_DIRECTORY, read_only=True)
+            print("source DB opened.")
+        if not isinstance(source_db, DbDriver):
+            raise TypeError("Please pass an instance of `DbDriver` or `None`.")
+        if not source_db.read_only:
+            raise RuntimeError(
+                "Please pass `DbDriver` for read only or `None`.")
+        self.source_db = source_db
+
+        # target db
+        if target_db is None:
+            print("opening target DB...")
+            target_db = DbDriver(PREPROCESSED_DATA_DIRECTORY)
+            print("target DB opened.")
+        if not isinstance(target_db, DbDriver):
+            raise TypeError("Please pass an instance of `DbDriver` or `None`.")
+        if target_db.read_only:
+            raise RuntimeError(
+                "Please pass `DbDriver` for writing or `None`.")
+        self.target_db = target_db
 
     def run_all(self):
         print()

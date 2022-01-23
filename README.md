@@ -20,11 +20,24 @@ Requirements analysis: https://github.com/msmiglo/pkwscraper/wiki#requirements
 
 ***
 
+**Data management:**
+
 This project uses no third-party DB engine. I've created simple wrapper to simulate NoSQL DB engine by wrapping csv files reader/writer. Tables are stored in the csv file each. The query syntax and API is inspired by MongoDB. This is to learn and thereafter show my deeper understaning of DataBase underlying logic and performance-related challenges (not that these challenges were solved here 😉, they were only encountered).
+
+***
+
+**Project structure:**
 
 Project is split into 3 parts:
 - downloading/scraping raw data from PKW ("Państwowa Komisja Wyborcza") website,
 - processing them to obtain useful and easily accessible database,
 - visualizing desired results of elections on map of Poland.
 
-It also includes API for writing custom scripts. That will allow users to visualize other direct results or some self-defined complex expresions on results values.
+***
+
+**API**:
+
+The project includes API for writing custom scripts. That will allow users to visualize other direct results or some self-defined complex expresions on results values. Necessary documentation can be found in repository.
+
+Database structure for preprocessed data: https://github.com/msmiglo/pkwscraper/blob/master/pkwscraper/doc/data_architecture.txt
+DB usage: [`DbDriver` interface](https://github.com/msmiglo/pkwscraper/blob/master/pkwscraper/lib/dbdriver.py#L243), [`Table` interface](https://github.com/msmiglo/pkwscraper/blob/master/pkwscraper/lib/dbdriver.py#L12)

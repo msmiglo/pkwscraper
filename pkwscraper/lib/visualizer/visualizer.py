@@ -17,16 +17,23 @@ from pkwscraper.lib.utilities import get_parent_code, Region
 
 ELECTION_TYPE = "sejm"
 YEAR = 2015
-RAW_DATA_DIRECTORY = "./pkwscraper/data/raw/sejm/2015/"
-RESCRIBED_DATA_DIRECTORY = "./pkwscraper/data/rescribed/sejm/2015/"
-PREPROCESSED_DATA_DIRECTORY = "./pkwscraper/data/preprocessed/sejm/2015/"
+RAW_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/raw/"
+RESCRIBED_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/rescribed/"
+PREPROCESSED_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/preprocessed/"
 
 
 class Visualizer:
-    def __init__(self):
-        print("opening DB...")
-        self.db = DbDriver(PREPROCESSED_DATA_DIRECTORY, read_only=True)
-        print("DB opened.")
+    def __init__(self, db=None):
+        if db is None:
+            print("opening DB...")
+            db = DbDriver(PREPROCESSED_DATA_DIRECTORY, read_only=True)
+            print("DB opened.")
+        if not isinstance(db, DbDriver):
+            raise TypeError("Please pass an instance of `DbDriver` or `None`.")
+        if not db.read_only:
+            raise RuntimeError(
+                "Please pass `DbDriver` for read only or `None`.")
+        self.db = db
 
     def get_invalid(self):
         gminy_geos = self.db["gminy"].find({}, fields=["_id", "geo"])

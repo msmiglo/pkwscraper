@@ -6,6 +6,7 @@ import pandas as pd
 
 
 EXTENSIONS = ['csv', 'xls', 'xlsx']
+SHORT_UUID = True
 
 
 class Table:
@@ -66,8 +67,11 @@ class Table:
     back and it will stay the same.
     """
     HEX_DIGITS = list('0123456789abcdef')
-    #UUID_PARTS = (8, 4, 4, 4, 12)
-    UUID_PARTS = (6, 4, 4)  # NOTE - this is for memory performance
+    if SHORT_UUID:
+        # for memory performance
+        UUID_PARTS = (6, 4, 4)
+    else:
+        UUID_PARTS = (8, 4, 4, 4, 12)
 
     def __init__(self, read_only=False):
         self.__read_only = read_only
@@ -84,7 +88,7 @@ class Table:
         """
         # create new table
         table = cls(read_only=read_only)
-        # NEW VERSION - convert to dict
+        # rescribe data
         dict_data = df.iloc[:limit].T.to_dict('dict')
         dict_data = {
             _id: {
@@ -94,19 +98,8 @@ class Table:
             }
             for _id, rec in dict_data.items()
         }
+        # assign to new table
         table.__data = dict_data
-        '''
-        # TODO - OLD VERSION
-        # iterate over records
-        i = 0
-        for _id, record_ser in df.iterrows():
-            if limit and i >= limit:
-                break
-            i += 1
-            record = dict(record_ser.dropna())
-            # add the record to table
-            table.put(record, _id=_id, _Table__force=True)
-        '''
         return table
 
     def to_df(self):
@@ -297,6 +290,10 @@ class DbDriver:
         filename = f"{name}.csv"
         filepath = os.path.join(self.db_directory, filename)
         return filepath
+
+    @property
+    def read_only(self):
+        return bool(self.__read_only)
 
     @staticmethod
     def _load_csv(filepath):

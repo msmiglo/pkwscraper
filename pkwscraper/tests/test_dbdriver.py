@@ -1,5 +1,6 @@
 
 import os
+import shutil
 from unittest import main, skip, TestCase
 from unittest.mock import call, MagicMock, patch
 
@@ -282,12 +283,14 @@ class TestDbDriver(TestCase):
 
     - test get item
     - test filepath
+    - test read only
     - test create table
     - test delete table
     - test load tables
     - test dump tables
 
     - test init not exists
+    - test init nested directory
     - test init exists
     - test read only errors
     - test load csv
@@ -309,7 +312,7 @@ class TestDbDriver(TestCase):
 
         # check if there is directory left from previous tests
         if os.path.exists(self.directory):
-            raise RuntimeError("Cannot operate on testing directory on harddrive.")
+            raise RuntimeError("Cannot operate on not-cleaned testing directory on harddrive.")
 
     def tearDown(self):
         # check if the testing directory was cleared by test
@@ -363,6 +366,18 @@ class TestDbDriver(TestCase):
         result = DbDriver._filepath(dbdriver, name)
         # assert
         self.assertIn(result, expected)
+
+    def test_read_only(self):
+        """ Unit test """
+        dbdriver = DbDriver.__new__(DbDriver)
+
+        dbdriver._DbDriver__read_only = True
+        self.assertTrue(dbdriver.read_only)
+        dbdriver._DbDriver__read_only = False
+        self.assertFalse(dbdriver.read_only)
+
+        with self.assertRaises(TypeError):
+            dbdriver.read_only()
 
     def test_create_table(self):
         """ Unit test """
@@ -507,6 +522,24 @@ class TestDbDriver(TestCase):
 
         # clean up
         os.rmdir(self.directory)
+
+    def test_init_nested_directory(self):
+        db_directory = self.directory + "other/directory/level/"
+
+        # prepare DB
+        dbdriver = DbDriver(db_directory=db_directory)
+        dbdriver.create_table("test")
+        dbdriver.dump_tables()
+
+        # assert
+        self.assertEqual(dbdriver.db_directory, db_directory)
+        self.assertTrue(os.path.exists(db_directory))
+        self.assertTrue(os.path.exists(db_directory + "test.csv"))
+
+        # clean up
+        shutil.rmtree(self.directory)
+
+        self.assertFalse(os.path.exists(db_directory))
 
     def test_init_exists(self):
         # create some synthetic tables data
