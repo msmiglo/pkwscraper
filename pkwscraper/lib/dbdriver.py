@@ -9,6 +9,44 @@ EXTENSIONS = ['csv', 'xls', 'xlsx']
 SHORT_UUID = True
 
 
+class Record:
+    """
+    `Record` class contains single record of table with its id.
+    """
+    def __init__(self, record, _id):
+        pass
+
+    def uuid(self):
+        """
+        make uuid
+        """
+        pass
+
+    def get_field_or_id(self):
+        """
+        returns id or 
+        """
+        pass
+
+    def get_fields_list(self):
+        """
+        xxx
+        """
+        pass
+
+    def to_id_dict(self):
+        """
+        returns id and dict of other key-value pairs
+        """
+        pass
+
+    def check_condition(self, query_dict):
+        """
+        checks if record matches given query
+        """
+        pass
+
+
 class Table:
     """
     `Table` class represents DB Table containing records with given
@@ -127,11 +165,18 @@ class Table:
 
     def put(self, record, _id=None, __force=False):
         """
+        Put record in table. Note that `_id` is not stored in
+        record dict, but as a record key in table. The `_id` can
+        be however passed in record dict, and it will be used
+        as a record ID, but the explicit passing of `_id` argument
+        has the priority.
+
         record: dict - record with `name: value` pairs
         _id: key for record or None
 
-        returns: Table
+        returns: record ID
         """
+        # REFACTOR TODO - MAKE A RECORD INSTANCE FIRST, THAN GET ITS ID
         # check read only
         if self.__read_only and not __force:
             raise IOError("Table is for read only.")
@@ -152,6 +197,7 @@ class Table:
         return _id
 
     def __getitem__(self, _id):
+        # todo - refactor
         return dict(self.__data[_id])
 
     @staticmethod
