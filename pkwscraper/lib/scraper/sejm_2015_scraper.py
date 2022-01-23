@@ -19,13 +19,21 @@ PREPROCESSED_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/preprocessed/"
 
 
 class Sejm2015Scraper(BaseScraper):
-    def __init__(self):
+    def __init__(self, db=None):
         # create downloader object
         self.dl = Downloader(year=2015, directory=RAW_DATA_DIRECTORY)
+
         # open db for rescribing
-        print("opening DB...")
-        self.db = DbDriver(RESCRIBED_DATA_DIRECTORY)
-        print("DB opened.")
+        if db is None:
+            print("opening DB...")
+            db = DbDriver(RESCRIBED_DATA_DIRECTORY)
+            print("DB opened.")
+        if not isinstance(db, DbDriver):
+            raise TypeError("Please pass an instance of `DbDriver` or `None`.")
+        if db.read_only:
+            raise RuntimeError(
+                "Please pass `DbDriver` for writing or `None`.")
+        self.db = db
 
     def run_all(self):
         # TODO - check, if the data is already downloaded
