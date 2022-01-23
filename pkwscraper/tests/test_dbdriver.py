@@ -60,6 +60,7 @@ class TestRecord(TestCase):
     - test get field
     - test get item
     - test get fields lists
+    - test wrong fields
     - test to id dict
     - test check condition
     """
@@ -71,20 +72,20 @@ class TestRecord(TestCase):
 
     def test_init(self):
         self.assertDictEqual(self.rec._Record__data, {"num": 5, "char": "A"})
-        self.assertEqual(self.rec._Record__id, 123)
+        self.assertEqual(self.rec._id, 123)
 
         rec_2 = Record({"num": 6, "char": "B", "_id": 456})
         self.assertDictEqual(rec_2._Record__data, {"num": 6, "char": "B"})
-        self.assertEqual(rec_2._Record__id, 456)
+        self.assertEqual(rec_2._id, 456)
 
         rec_3 = Record({"num": 7, "char": "C", "_id": 456}, _id=789)
         self.assertDictEqual(rec_3._Record__data, {"num": 7, "char": "C"})
-        self.assertEqual(rec_3._Record__id, 789)
+        self.assertEqual(rec_3._id, 789)
 
     def test_init_no_id(self):
         rec = Record({"num": 5, "char": "A"})
         self.assertDictEqual(rec._Record__data, {"num": 5, "char": "A"})
-        assertUUID(self, rec._Record__id)
+        assertUUID(self, rec._id)
 
     def test_get_id(self):
         rec_id = self.rec.get_field_or_id("_id")
@@ -104,10 +105,16 @@ class TestRecord(TestCase):
         result = self.rec.get_fields_list(["char", "_id", "char", "num"])
         self.assertListEqual(rec_field, ["A", 123, "A", 5])
 
+    def test_get_fields_list(self):
+        with self.assertRaises(TypeError) as e:
+            exc = e
+            self.rec.get_fields_list(("char", "num"))
+        print(exc.exception)
+
     def test_to_id_dict(self):
-        rec_id, rec_data = self.rec.to_id_dict
+        rec_id, rec_data = self.rec.to_id_dict()
         self.assertEqual(rec_id, 123)
-        self.assertDictEqual(rec_id, {"num": 5, "char": "A"})
+        self.assertDictEqual(rec_data, {"num": 5, "char": "A"})
 
     def test_check_condition(self):
         self.assertTrue(self.rec.check_condition({}))
@@ -353,6 +360,7 @@ class TestTable(TestCase):
         self.assertDictEqual(t._Table__data, t2._Table__data)
 
 
+@skip
 class TestDbDriver(TestCase):
     """
     This is more like integration test, as it is mainly the interface

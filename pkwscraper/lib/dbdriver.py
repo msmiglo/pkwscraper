@@ -11,40 +11,77 @@ SHORT_UUID = True
 
 class Record:
     """
-    `Record` class contains single record of table with its id.
+    `Record` class contains single record of table with its ID.
+
+    If no ID is given in contructor - it is created as UUID. This
+    prevents mistakes made when one tries to choose record by ID
+    that comes from another table.
     """
-    def __init__(self, record, _id):
-        pass
+    def __init__(self, record, _id=None):
+        # copy dict
+        record = dict(record)
 
-    def uuid(self):
-        """
-        make uuid
-        """
-        pass
+        # get record id and remove it from record
+        record_id = record.pop("_id", None)
+        if _id is None:
+            _id = record_id
+        if _id is None:
+            _id = self._make_uuid()
 
-    def get_field_or_id(self):
-        """
-        returns id or 
-        """
-        pass
+        # assign data
+        self.__data = record
+        self._id = _id
 
-    def get_fields_list(self):
+    @staticmethod
+    def _hex_string(k):
+        """ Return k-length hex-digit string. """
+        sample = random.choices(Table.HEX_DIGITS, k=k)
+        return "".join(sample)
+
+    @staticmethod
+    def _make_uuid():
+        """ This is just pretending to be UUID. """
+        parts = [Record._hex_string(k) for k in Table.UUID_PARTS]
+        return "-".join(parts)
+
+    def get_field_or_id(self, name):
         """
-        xxx
+        returns id or value of field
         """
-        pass
+        if name == "_id":
+            return self._id
+        return self.__data.get(name)
+
+    def get_fields_list(self, fields):
+        """
+        return list of field values
+        """
+        # choose one value
+        if isinstance(fields, str):
+            return self.get_field_or_id(fields)
+
+        # choose only values matching given fields
+        if isinstance(fields, list):
+            return [self.get_field_or_id(field) for field in fields]
+
+        raise TypeError(f"`fields` should be of one of types: "
+                        f"`None`, `str` or `list`. got: {type(fields)}")
 
     def to_id_dict(self):
         """
         returns id and dict of other key-value pairs
         """
-        pass
+        return self._id, dict(self.__data)
 
     def check_condition(self, query_dict):
         """
         checks if record matches given query
         """
-        pass
+        return all(key in self.__data and self.__data[key] == value
+                   for key, value in query_dict.items())
+
+    def __getitem__(self, name):
+        return self.get_field_or_id(name)
 
 
 class Table:
@@ -151,17 +188,6 @@ class Table:
         df = pd.DataFrame(self.__data).T
         df.index.name = "_id"
         return df
-
-    @staticmethod
-    def _hex_string(k):
-        """ Returns k-length hex-digit string. """
-        sample = random.choices(Table.HEX_DIGITS, k=k)
-        return "".join(sample)
-
-    @staticmethod
-    def _make_uuid():
-        parts = [Table._hex_string(k) for k in Table.UUID_PARTS]
-        return "-".join(parts)
 
     def put(self, record, _id=None, __force=False):
         """
