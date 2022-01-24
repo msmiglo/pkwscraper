@@ -17,7 +17,20 @@ class Record:
     prevents mistakes made when one tries to choose record by ID
     that comes from another table.
     """
-    def __init__(self, record, _id=None):
+    HEX_DIGITS = list('0123456789abcdef')
+    if SHORT_UUID:
+        # for memory performance
+        UUID_PARTS = (6, 4, 4)
+    else:
+        UUID_PARTS = (8, 4, 4, 4, 12)
+
+    def __init__(self, record, _id):
+        self.__data = record
+        self._id = _id
+
+    @classmethod
+    def from_dict(cls, record, _id=None):
+        """ Just regular way of creating new Record. """
         # copy dict
         record = dict(record)
 
@@ -26,22 +39,37 @@ class Record:
         if _id is None:
             _id = record_id
         if _id is None:
-            _id = self._make_uuid()
+            _id = cls._make_uuid()
 
-        # assign data
-        self.__data = record
-        self._id = _id
+        # make record
+        return cls(record, _id)
+
+    @classmethod
+    def from_df_dict_item(cls, item):
+        """
+        For creating records when reading a file - improved performance.
+        """
+        # unpack dict item
+        _id, record = item
+
+        # drop null values
+        record = {name: value
+                for name, value in record.items()
+                if not pd.isna(value)}
+
+        # make record
+        return Record(record, _id)
 
     @staticmethod
     def _hex_string(k):
         """ Return k-length hex-digit string. """
-        sample = random.choices(Table.HEX_DIGITS, k=k)
+        sample = random.choices(Record.HEX_DIGITS, k=k)
         return "".join(sample)
 
     @staticmethod
     def _make_uuid():
         """ This is just pretending to be UUID. """
-        parts = [Record._hex_string(k) for k in Table.UUID_PARTS]
+        parts = [Record._hex_string(k) for k in Record.UUID_PARTS]
         return "-".join(parts)
 
     def get_field_or_id(self, name):
@@ -69,9 +97,15 @@ class Record:
 
     def to_id_dict(self):
         """
-        returns id and dict of other key-value pairs
+        return id and dict of other key-value pairs
         """
         return self._id, dict(self.__data)
+
+    def to_dict(self):
+        """
+        return copy of dict data
+        """
+        return dict(self.__data)
 
     def check_condition(self, query_dict):
         """
@@ -82,6 +116,13 @@ class Record:
 
     def __getitem__(self, name):
         return self.get_field_or_id(name)
+
+    def __eq__(self, other):
+        if isinstance(other, Record):
+            return self.__data == other.__data
+        if isinstance(other, dict):
+            return self.__data == other
+        return false
 
 
 class Table:
@@ -141,13 +182,6 @@ class Table:
     of `DataFrame`. Shortly said - `Table` can be converted to DF and
     back and it will stay the same.
     """
-    HEX_DIGITS = list('0123456789abcdef')
-    if SHORT_UUID:
-        # for memory performance
-        UUID_PARTS = (6, 4, 4)
-    else:
-        UUID_PARTS = (8, 4, 4, 4, 12)
-
     def __init__(self, read_only=False):
         self.__read_only = read_only
         self.__data = {}
@@ -163,18 +197,19 @@ class Table:
         """
         # create new table
         table = cls(read_only=read_only)
-        # rescribe data
+
+        # convert to python data structures
         dict_data = df.iloc[:limit].T.to_dict('dict')
-        dict_data = {
-            _id: {
-                name: value
-                for name, value in rec.items()
-                if not pd.isna(value)
-            }
-            for _id, rec in dict_data.items()
-        }
+
+        # make records
+        records = [Record.from_df_dict_item(item)
+                   for item in dict_data.items()]
+
+        # make records dictionary
+        records_data = {rec._id: rec for rec in records}
+
         # assign to new table
-        table.__data = dict_data
+        table.__data = records_data
         return table
 
     def to_df(self):
@@ -184,8 +219,13 @@ class Table:
         # check read only
         if self.__read_only:
             raise IOError("Table is for read only.")
+
+        # convert data to dicts
+        data = dict(record.to_id_dict()
+                    for record in self.__data.values())
+
         # make data frame
-        df = pd.DataFrame(self.__data).T
+        df = pd.DataFrame(data).T
         df.index.name = "_id"
         return df
 
@@ -206,7 +246,20 @@ class Table:
         # check read only
         if self.__read_only and not __force:
             raise IOError("Table is for read only.")
-        # copy dict
+
+        # make record
+        record = Record.from_dict(record, _id)
+
+        # add record to data
+        _id = record._id
+        self.__data[_id] = record
+        return _id
+
+
+
+
+
+        '''# copy dict
         record = dict(record)
 
         # get record id and remove it from record
@@ -220,19 +273,18 @@ class Table:
 
         # add record to data
         self.__data[_id] = record
-        return _id
+        return _id'''
 
     def __getitem__(self, _id):
-        # todo - refactor
-        return dict(self.__data[_id])
+        return self.__data[_id].to_dict()
 
-    @staticmethod
+    '''@staticmethod
     def _get_id_or_field(_id, record, field):
         if field == "_id":
             return _id
-        return record.get(field)
+        return record.get(field)'''
 
-    def _find(self, query):
+    '''def _find(self, query):
         # return all if no criterions
         if len(query) == 0:
             return dict(self.__data)
@@ -242,7 +294,7 @@ class Table:
             if all(key in record and record[key] == value
                    for key, value in query.items()):
                 result[_id] = dict(record)
-        return result
+        return result'''
 
     def find(self, query, fields=None):
         """
@@ -252,28 +304,33 @@ class Table:
 
         returns: dict/list
         """
-        # get raw results
-        results = self._find(query)
-        # return raw results if fields not given
+        # get records matching query
+        records = [rec for rec in self.__data.values()
+                   if rec.check_condition(query)]
+
+        # handle `fields` argument
         if fields is None:
-            return results
-        # chose one value from each record
-        if isinstance(fields, str):
-            return [self._get_id_or_field(_id, record, fields)
-                    for _id, record in results.items()]
-        # chose only values matching given fields
-        if isinstance(fields, list):
-            return [[self._get_id_or_field(_id, record, field)
-                    for field in fields]
-                    for _id, record in results.items()]
-        raise TypeError(f"`fields` should be of one of types: "
-                        "`None`, `str` or `list`. got: {type(fields)}")
+            # return raw results if fields not given
+            results = dict(rec.to_id_dict() for rec in records)
+        elif isinstance(fields, str):
+            # chose one value from each record
+            results = [rec[fields] for rec in records]
+        elif isinstance(fields, list):
+            # chose only values matching given fields
+            results = [rec.get_fields_list(fields) for rec in records]
+        else:
+            raise TypeError(f"`fields` should be of one of types: "
+                            f"`None`, `str` or `list`. got: {type(fields)}")
+
+        return results
 
     def _find_one(self, query):
-        for _id, record in self.__data.items():
-            if all(key in record and record[key] == value
+        for record in self.__data.values():
+            if record.check_condition(query):
+                return record
+            '''if all(key in record and record[key] == value
                    for key, value in query.items()):
-                return _id, dict(record)
+                return _id, dict(record)'''
 
     def find_one(self, query, fields=None):
         """
@@ -284,24 +341,24 @@ class Table:
         returns: dict/value/None
         """
         # get raw result
-        one = self._find_one(query)
+        record = self._find_one(query)
         # if no result found
-        if one is None:
+        if record is None:
             return None
-        # unpack the result
-        _id, record = one
-        # if fields not given - return raw result
+        # handle `fields` parameter
         if fields is None:
-            return _id, record
-        # chose one value
-        if isinstance(fields, str):
-            return self._get_id_or_field(_id, record, fields)
-        # chose only values matching given fields
-        if isinstance(fields, list):
-            return [self._get_id_or_field(_id, record, field)
-                    for field in fields]
-        raise TypeError(f"`fields` should be of one of types: "
-                        "`None`, `str` or `list`. got: {type(fields)}")
+            # if fields not given - return raw result
+            result = record.to_id_dict()
+        elif isinstance(fields, str):
+            # chose one value
+            result = record[fields]
+        elif isinstance(fields, list):
+            # chose only values matching given fields
+            result = record.get_fields_list(fields)
+        else:
+            raise TypeError(f"`fields` should be of one of types: "
+                            f"`None`, `str` or `list`. got: {type(fields)}")
+        return result
 
 
 class DbDriver:

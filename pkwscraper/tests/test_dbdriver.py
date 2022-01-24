@@ -5,6 +5,7 @@ from unittest import main, skip, TestCase
 from unittest.mock import call, MagicMock, patch
 
 from pandas import DataFrame, Series
+from pandas import np
 
 from pkwscraper.lib.dbdriver import DbDriver, Record, Table
 
@@ -55,7 +56,9 @@ class TestUUID(TestCase):
 class TestRecord(TestCase):
     """
     - test init
-    - test init no id
+    - test from dict            # TODO
+    - test from dict no id      # TODO
+    - test from df dict item    # TODO
     - test get id
     - test get field
     - test get item
@@ -63,6 +66,7 @@ class TestRecord(TestCase):
     - test wrong fields
     - test to id dict
     - test check condition
+    - test eq
     """
     def setUp(self):
         self.rec = Record({"num": 5, "char": "A"}, _id=123)
@@ -74,18 +78,38 @@ class TestRecord(TestCase):
         self.assertDictEqual(self.rec._Record__data, {"num": 5, "char": "A"})
         self.assertEqual(self.rec._id, 123)
 
-        rec_2 = Record({"num": 6, "char": "B", "_id": 456})
+    def test_from_dict(self):
+        rec_2 = Record.from_dict(
+            {"num": 6, "char": "B", "_id": 456})
         self.assertDictEqual(rec_2._Record__data, {"num": 6, "char": "B"})
         self.assertEqual(rec_2._id, 456)
 
-        rec_3 = Record({"num": 7, "char": "C", "_id": 456}, _id=789)
+        rec_3 = Record.from_dict(
+            {"num": 7, "char": "C", "_id": 456}, _id=789)
         self.assertDictEqual(rec_3._Record__data, {"num": 7, "char": "C"})
         self.assertEqual(rec_3._id, 789)
 
-    def test_init_no_id(self):
-        rec = Record({"num": 5, "char": "A"})
+    def test_from_dict_no_id(self):
+        rec = Record.from_dict({"num": 5, "char": "A"})
         self.assertDictEqual(rec._Record__data, {"num": 5, "char": "A"})
         assertUUID(self, rec._id)
+
+    def test_from_df_dict_item(self):
+        rec = Record.from_df_dict_item((
+            123, {"num": 5, "char": "A"}))
+        self.assertDictEqual(rec._Record__data, {"num": 5, "char": "A"})
+        self.assertEqual(rec._id, 123)
+
+        rec_2 = Record.from_df_dict_item((
+            456, {"num": 6, "char": "B", "1null": None, "2null": np.nan}))
+        self.assertDictEqual(rec_2._Record__data, {"num": 6, "char": "B"})
+        self.assertEqual(rec_2._id, 456)
+
+        rec_3 = Record.from_df_dict_item((
+            789, {"num": 0, "text": "", "bool": False}))
+        self.assertDictEqual(
+            rec_3._Record__data, {"num": 0, "text": "", "bool": False})
+        self.assertEqual(rec_3._id, 789)
 
     def test_get_id(self):
         rec_id = self.rec.get_field_or_id("_id")
@@ -107,9 +131,12 @@ class TestRecord(TestCase):
 
     def test_get_fields_list(self):
         with self.assertRaises(TypeError) as e:
-            exc = e
             self.rec.get_fields_list(("char", "num"))
-        print(exc.exception)
+        self.assertEqual(
+            e.exception.args[0],
+            "`fields` should be of one of types: `None`, `str` or `list`. "
+            "got: <class 'tuple'>"
+        )
 
     def test_to_id_dict(self):
         rec_id, rec_data = self.rec.to_id_dict()
@@ -128,6 +155,15 @@ class TestRecord(TestCase):
         self.assertFalse(self.rec.check_condition({"other": "A"}))
         self.assertFalse(self.rec.check_condition({"_id": 123}))
         self.assertFalse(self.rec.check_condition({"_id": 147}))
+
+    def test_eq(self):
+        rec_2 = Record.from_dict({"char": "A", "num": 5}, _id=456)
+        self.assertEqual(self.rec, rec_2)
+
+        rec_3 = Record.from_dict({"char": "B", "num": 5}, _id=123)
+        self.assertNotEqual(self.rec, rec_3)
+
+        self.assertEqual(self.rec, {"char": "A", "num": 5})
 
 
 class TestTable(TestCase):
@@ -360,7 +396,6 @@ class TestTable(TestCase):
         self.assertDictEqual(t._Table__data, t2._Table__data)
 
 
-@skip
 class TestDbDriver(TestCase):
     """
     This is more like integration test, as it is mainly the interface
