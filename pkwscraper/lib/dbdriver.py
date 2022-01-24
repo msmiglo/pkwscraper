@@ -452,13 +452,18 @@ class DbDriver:
         return table_df
 
     def _load_table(self, name):
-        # TODO TODO TODO TODO
-        # TODO TODO TODO TODO
-        # TODO - add warning when loading >10MB file
-        # TODO TODO TODO TODO
-        # TODO TODO TODO TODO
-        # load file
+        # get file path
         filepath = self._filepath(name)
+        # print file size warning
+        file_size = os.path.getsize(filepath)
+        if file_size > 5e6:
+            minutes = file_size / 3e7
+            minutes = float(f"{minutes:.1g}")
+            if int(minutes) == minutes:
+                minutes = int(minutes)
+            print(f"Loading DB table `{name}` may take several minutes..."
+                  f" (max aproximately {minutes} min.)")
+        # load file
         table_df = self._load_csv(filepath)
         # make table
         table = Table.from_df(table_df, limit=self.limit,

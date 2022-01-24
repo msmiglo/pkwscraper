@@ -17,9 +17,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
     def __init__(self, source_db=None, target_db=None):
         # source db
         if source_db is None:
-            print("opening source DB...")
             source_db = DbDriver(RESCRIBED_DATA_DIRECTORY, read_only=True)
-            print("source DB opened.")
         if not isinstance(source_db, DbDriver):
             raise TypeError("Please pass an instance of `DbDriver` or `None`.")
         if not source_db.read_only:
@@ -29,9 +27,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
 
         # target db
         if target_db is None:
-            print("opening target DB...")
             target_db = DbDriver(PREPROCESSED_DATA_DIRECTORY)
-            print("target DB opened.")
         if not isinstance(target_db, DbDriver):
             raise TypeError("Please pass an instance of `DbDriver` or `None`.")
         if target_db.read_only:

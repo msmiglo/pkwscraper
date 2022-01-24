@@ -25,9 +25,7 @@ class Sejm2015Scraper(BaseScraper):
 
         # open db for rescribing
         if db is None:
-            print("opening DB...")
             db = DbDriver(RESCRIBED_DATA_DIRECTORY)
-            print("DB opened.")
         if not isinstance(db, DbDriver):
             raise TypeError("Please pass an instance of `DbDriver` or `None`.")
         if db.read_only:

@@ -25,9 +25,7 @@ PREPROCESSED_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/preprocessed/"
 class Visualizer:
     def __init__(self, db=None):
         if db is None:
-            print("opening DB...")
             db = DbDriver(PREPROCESSED_DATA_DIRECTORY, read_only=True)
-            print("DB opened.")
         if not isinstance(db, DbDriver):
             raise TypeError("Please pass an instance of `DbDriver` or `None`.")
         if not db.read_only:
