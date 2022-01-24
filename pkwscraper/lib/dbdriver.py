@@ -356,8 +356,9 @@ class DbDriver:
     DB can have `Table` added or deleted by `create_table` and
     `delete_table` methods, respectively.
 
-    The `_load_tables` method allows to load DB from harddrive, which
-    is done in constructor anyway. It is considered private method.
+    Tables are not loaded on constructor. Each table is loaded when
+    accesing for the first time via the square brackets. It prevents
+    from always loading big, unnecesary tables.
 
     The `dump_tables` method will save changes to harddrive.
     NOTE: when ending work with DbDriver, the changes will not be
