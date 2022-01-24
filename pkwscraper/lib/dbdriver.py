@@ -16,6 +16,10 @@ class Record:
     If no ID is given in contructor - it is created as UUID. This
     prevents mistakes made when one tries to choose record by ID
     that comes from another table.
+
+    `Record` class is only used to store data, it is not returned
+    by any public method. It is NOT intended to use directly with
+    `Table` instances. But it can be used for other purposes.
     """
     HEX_DIGITS = list('0123456789abcdef')
     if SHORT_UUID:
@@ -30,7 +34,7 @@ class Record:
 
     @classmethod
     def from_dict(cls, record, _id=None):
-        """ Just regular way of creating new Record. """
+        """ Create new Record. Just regular way of doing it. """
         # copy dict
         record = dict(record)
 
@@ -47,15 +51,16 @@ class Record:
     @classmethod
     def from_df_dict_item(cls, item):
         """
-        For creating records when reading a file - improved performance.
+        Create record. Custom method used when reading a csv file,
+        with optimized performance.
         """
         # unpack dict item
         _id, record = item
 
         # drop null values
         record = {name: value
-                for name, value in record.items()
-                if not pd.isna(value)}
+                  for name, value in record.items()
+                  if not pd.isna(value)}
 
         # make record
         return Record(record, _id)
@@ -74,7 +79,9 @@ class Record:
 
     def get_field_or_id(self, name):
         """
-        returns id or value of field
+        Return ID or value of field.
+
+        name: str - name of given field
         """
         if name == "_id":
             return self._id
@@ -82,7 +89,7 @@ class Record:
 
     def get_fields_list(self, fields):
         """
-        return list of field values
+        Return list of values for given fields.
         """
         # choose one value
         if isinstance(fields, str):
@@ -97,19 +104,19 @@ class Record:
 
     def to_id_dict(self):
         """
-        return id and dict of other key-value pairs
+        Return ID and dict of key-value pairs.
         """
         return self._id, dict(self.__data)
 
     def to_dict(self):
         """
-        return copy of dict data
+        Return copy of dict data.
         """
         return dict(self.__data)
 
     def check_condition(self, query_dict):
         """
-        checks if record matches given query
+        Check if record matches given query.
         """
         return all(key in self.__data and self.__data[key] == value
                    for key, value in query_dict.items())
@@ -128,7 +135,7 @@ class Record:
 class Table:
     """
     `Table` class represents DB Table containing records with given
-    id's. Constructor creates empty table. `from_df` method gets
+    IDs. Constructor creates empty table. `from_df` method gets
     data from `pandas.DataFrame` object.
 
     `Table` can be created as read only - the modifying and
@@ -143,14 +150,14 @@ class Table:
     `find(query={field_name_1: value_1, field_name_2: value_2})`
 
     This will return all records which have the given fields with
-    given values. The return structure is `dict` of records with its
-    ID as key. Records are represented as "documents" which are
+    given values. The return structure is `dict` of records with their
+    IDs as keys. Records are represented as "documents" which are
     dictionaries of `name: value` pairs. Names of fields in records
     can be anything, except "_id" field, which is the record ID.
 
     The `find_one` method can be used to return just one result
     (first found). It takes the same kind of query. It returns the
-    id of record, and the record itself (so the tuple is returned).
+    ID of record, and the record itself (so the tuple is returned).
     If there isn't any record matching the query, the `None` is
     returned.
     NOTE: just a single None object will be returned, not a tuple.
@@ -168,16 +175,16 @@ class Table:
     method in such case will return list of lists of values.
 
     Writing records to `Table` can be done via `put` method. It takes
-    the ID of new record and dict with name: value pairs. If the ID
-    is not provided - a UUID is generated. If the provided ID
-    duplicates an existing one - the record will be overwritten. It
-    can be used for modifying records also.
+    the ID of new record and dict with `name: value` pairs. If the ID
+    is not provided - a (pretended) UUID is generated. If the provided
+    ID duplicates an existing one - the record will be overwritten. This
+    behaviour can be also used for modifying records.
 
     Deleting or modifying records must be done manually. It is not
     supported as it is not needed for this project.
 
-    `Table` can be converted to `pandas.DataFrame` without loss of data
-    and vice versa - it can be loaded from `pandas.DataFrame`, but
+    `Table` can be converted to `pandas.DataFrame` without loss of data.
+    And vice versa - it can be loaded from `pandas.DataFrame`, but
     this time it is not guaranteed to support all strange features
     of `DataFrame`. Shortly said - `Table` can be converted to DF and
     back and it will stay the same.
@@ -189,6 +196,8 @@ class Table:
     @classmethod
     def from_df(cls, df, limit=None, read_only=False):
         """
+        Read table from DataFrame and make table from it.
+
         df: pandas.DataFrame - data structure containing table data
         limit: None/int - maximum number of records to be loaded
         read_only: bool - if table has to be protected from changing
@@ -214,6 +223,8 @@ class Table:
 
     def to_df(self):
         """
+        Convert table to DataFrame.
+
         returns: pandas.DataFrame
         """
         # check read only
@@ -231,18 +242,17 @@ class Table:
 
     def put(self, record, _id=None, __force=False):
         """
-        Put record in table. Note that `_id` is not stored in
-        record dict, but as a record key in table. The `_id` can
-        be however passed in record dict, and it will be used
-        as a record ID, but the explicit passing of `_id` argument
-        has the priority.
+        Put record in table. Note that `_id` is not stored in record
+        dict, but as a record key in table. The `_id` can be however
+        passed in record dict - it will be popped from it and used as
+        a record ID. However the explicit passing of `_id` argument has
+        the priority.
 
         record: dict - record with `name: value` pairs
-        _id: key for record or None
+        _id: key for record or `None`
 
         returns: record ID
         """
-        # REFACTOR TODO - MAKE A RECORD INSTANCE FIRST, THAN GET ITS ID
         # check read only
         if self.__read_only and not __force:
             raise IOError("Table is for read only.")
@@ -255,54 +265,20 @@ class Table:
         self.__data[_id] = record
         return _id
 
-
-
-
-
-        '''# copy dict
-        record = dict(record)
-
-        # get record id and remove it from record
-        record_id = record.pop("_id", None)
-        if _id is None:
-            _id = record_id
-        if _id is None:
-            # usign UUID prevents from mistakes when someone choses
-            # records, using ID from another table
-            _id = self._make_uuid()
-
-        # add record to data
-        self.__data[_id] = record
-        return _id'''
-
     def __getitem__(self, _id):
         return self.__data[_id].to_dict()
 
-    '''@staticmethod
-    def _get_id_or_field(_id, record, field):
-        if field == "_id":
-            return _id
-        return record.get(field)'''
-
-    '''def _find(self, query):
-        # return all if no criterions
-        if len(query) == 0:
-            return dict(self.__data)
-        # copy matching results and return
-        result = {}
-        for _id, record in self.__data.items():
-            if all(key in record and record[key] == value
-                   for key, value in query.items()):
-                result[_id] = dict(record)
-        return result'''
-
     def find(self, query, fields=None):
         """
+        Find all records matching the query.
+
         query: dict - dictionary with fields and values to be matched
             in searched records
         fields: key/list/None - keys that has to be included in results
 
-        returns: dict/list
+        returns:
+            dict - if `fields` is None
+            list - when `fields` specified
         """
         # get records matching query
         records = [rec for rec in self.__data.values()
@@ -328,17 +304,20 @@ class Table:
         for record in self.__data.values():
             if record.check_condition(query):
                 return record
-            '''if all(key in record and record[key] == value
-                   for key, value in query.items()):
-                return _id, dict(record)'''
 
     def find_one(self, query, fields=None):
         """
+        Find only one record - the first matching the query.
+
         query: dict - dictionary with fields and values to be matched
             in searched records
         fields: key/list/None - keys that has to be included in results
 
-        returns: dict/value/None
+        returns:
+            None - if record not found
+            (_id, dict) tuple - when `fields` is None
+            single value - if `fields` specify single key name
+            list - if `fields` is a list of keys
         """
         # get raw result
         record = self._find_one(query)
@@ -377,8 +356,8 @@ class DbDriver:
     DB can have `Table` added or deleted by `create_table` and
     `delete_table` methods, respectively.
 
-    The `load_tables` method allows to load DB from harddrive, which
-    is done in constructor anyway.
+    The `_load_tables` method allows to load DB from harddrive, which
+    is done in constructor anyway. It is considered private method.
 
     The `dump_tables` method will save changes to harddrive.
     NOTE: when ending work with DbDriver, the changes will not be
@@ -388,7 +367,7 @@ class DbDriver:
     def __init__(self, db_directory, limit=None, read_only=False):
         """
         db_directory: str - directory which contains DB tables
-        limit: int/None - max numbers of records to be loaded in one table
+        limit: int/None - max numbers of records to be loaded to each table
         read_only: bool - whether to protect DB from changes
         """
         # initialize attributes
@@ -422,6 +401,7 @@ class DbDriver:
 
     @property
     def read_only(self):
+        """ Return the value of `read_only` parameter. """
         return bool(self.__read_only)
 
     @staticmethod
@@ -547,7 +527,7 @@ class DbDriver:
 
     def delete(self, access_code):
         """
-        Deletion of entire DB from harddrive directory, including the
+        Delete entire DB from harddrive directory, including the
         directory. The access code must be extracted from
         `get_deleting_access` method for the security reason. Deleting
         the directories on harddrive needs confirmation, because it
