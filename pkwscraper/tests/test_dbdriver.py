@@ -608,14 +608,20 @@ class TestDbDriver(TestCase):
         MockTableClass = MagicMock()
         MockTableClass.from_df.return_value = mock_table
 
+        mock_os_path_size = MagicMock()
+        mock_os_path_size.return_value = 1000
+
         # act
         with patch("pkwscraper.lib.dbdriver.Table", MockTableClass):
-            result = DbDriver._load_table(mock_db, table_name)
+            with patch("pkwscraper.lib.dbdriver.os.path.getsize",
+                       mock_os_path_size):
+                result = DbDriver._load_table(mock_db, table_name)
 
         # assert
         mock_db._filepath.assert_called_once_with(table_name)
         mock_db._load_excel.assert_not_called()
         mock_db._load_csv.assert_called_once_with(filepath)
+        mock_os_path_size.assert_called_once_with(filepath)
 
         MockTableClass.from_df.assert_called_once_with(
             mock_df, limit=None, read_only=True)
