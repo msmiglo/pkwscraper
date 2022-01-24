@@ -402,11 +402,13 @@ class TestDbDriver(TestCase):
     for underlying pandas library and file system communication.
 
     - test get item
+    - test get item no loaded
     - test filepath
     - test read only
     - test create table
     - test delete table
-    - test load tables
+    - test load table names
+    - test load table
     - test dump tables
 
     - test init not exists
@@ -465,13 +467,29 @@ class TestDbDriver(TestCase):
 
     def test_get_item(self):
         """ Unit test """
-        dbdriver = DbDriver.__new__(DbDriver) # MagicMock(DbDriver)
+        dbdriver = DbDriver.__new__(DbDriver)
         table = MagicMock()
         dbdriver._DbDriver__tables = {"MyTable": table}
+        dbdriver._load_table = MagicMock()
 
         with self.assertRaises(KeyError):
             dbdriver["NotExistingTable"]
         result = dbdriver["MyTable"]
+        dbdriver._load_table.assert_not_called()
+        self.assertIs(result, table)
+
+    def test_get_item_not_loaded(self):
+        """ Unit test """
+        # arrange
+        dbdriver = DbDriver.__new__(DbDriver)
+        table = MagicMock()
+        dbdriver._DbDriver__tables = {"MyTable": None}
+        dbdriver._load_table = MagicMock()
+        dbdriver._load_table.return_value = table
+        # act
+        result = dbdriver["MyTable"]
+        # assert
+        dbdriver._load_table.assert_called_once_with("MyTable")
         self.assertIs(result, table)
 
     def test_filepath(self):
@@ -529,7 +547,8 @@ class TestDbDriver(TestCase):
 
         mock_db = MagicMock()
         mock_db._DbDriver__read_only = False
-        mock_db._DbDriver__tables = {table_name: mock_table, "other": mock_table_2}
+        mock_db._DbDriver__tables = {
+            table_name: mock_table, "other": mock_table_2}
         mock_db._DbDriver__dropped_tables = []
 
         # act
@@ -539,7 +558,7 @@ class TestDbDriver(TestCase):
         self.assertDictEqual(mock_db._DbDriver__tables, {"other": mock_table_2})
         self.assertListEqual(mock_db._DbDriver__dropped_tables, [table_name])
 
-    def test_load_tables(self):
+    def test_load_table_names(self):
         """ Unit test """
         # arrange
         table_filenames = ["labada.csv", "macarena.csv"]
@@ -548,42 +567,63 @@ class TestDbDriver(TestCase):
 
         mock_db = MagicMock()
         mock_db.db_directory = self.directory
+
+        mock_db.limit = None
+        mock_db._DbDriver__read_only = True
+        mock_db._DbDriver__tables = {}
+
+        # act
+        with patch("pkwscraper.lib.dbdriver.os.listdir", mock_os_listdir):
+            DbDriver._load_table_names(mock_db)
+
+        # assert
+        mock_os_listdir.assert_called_once_with(self.directory)
+
+        mock_db._load_excel.assert_not_called()
+        mock_db._load_csv.assert_not_called()
+        mock_db._load.assert_not_called()
+
+        self.assertDictEqual(mock_db._DbDriver__tables, {
+            "labada": None,
+            "macarena": None
+        })
+
+    def test_load_table(self):
+        """ Unit test """
+        # arrange
+        table_name = "labada"
+        filepath = os.path.join(self.directory, "labada.csv")
+
+        mock_db = MagicMock()
+        mock_db.db_directory = self.directory
         mock_df = MagicMock()
-        mock_df_2 = MagicMock()
-        mock_db._load_csv.side_effect = [mock_df, mock_df_2]
+        mock_db._load_csv.return_value = mock_df
+        mock_db._filepath.return_value = filepath
 
         mock_db.limit = None
         mock_db._DbDriver__read_only = True
         mock_db._DbDriver__tables = {}
 
         mock_table = MagicMock()
-        mock_table_2 = MagicMock()
         MockTableClass = MagicMock()
-        MockTableClass.from_df.side_effect = [mock_table, mock_table_2]
+        MockTableClass.from_df.return_value = mock_table
 
         # act
         with patch("pkwscraper.lib.dbdriver.Table", MockTableClass):
-            with patch("pkwscraper.lib.dbdriver.os.listdir", mock_os_listdir):
-                DbDriver._load_tables(mock_db)
+            result = DbDriver._load_table(mock_db, table_name)
 
         # assert
-        mock_os_listdir.assert_called_once_with(self.directory)
-
+        mock_db._filepath.assert_called_once_with(table_name)
         mock_db._load_excel.assert_not_called()
-        mock_db._load_csv.assert_has_calls([
-            call(os.path.join(self.directory, "labada.csv")),
-            call(os.path.join(self.directory, "macarena.csv"))
-        ])
+        mock_db._load_csv.assert_called_once_with(filepath)
 
-        MockTableClass.from_df.assert_has_calls([
-            call(mock_df, limit=None, read_only=True),
-            call(mock_df_2, limit=None, read_only=True)
-        ])
+        MockTableClass.from_df.assert_called_once_with(
+            mock_df, limit=None, read_only=True)
 
         self.assertDictEqual(mock_db._DbDriver__tables, {
-            "labada": mock_table,
-            "macarena": mock_table_2
+            "labada": mock_table
         })
+        self.assertIs(result, mock_table)
 
     def test_dump_tables(self):
         """ Unit test """
@@ -591,7 +631,8 @@ class TestDbDriver(TestCase):
         mock_table = MagicMock()
         mock_db = MagicMock()
         mock_db._DbDriver__read_only = False
-        mock_db._DbDriver__tables = {"new_table": mock_table}
+        mock_db._DbDriver__tables = {
+            "new_table": mock_table, "not_changed_table": None}
         mock_db._DbDriver__dropped_tables = ["old_table", "missing_table"]
         mock_db._filepath.side_effect = [
             "./here/old_table.csv",
@@ -668,15 +709,23 @@ class TestDbDriver(TestCase):
         # test tables data
         dbdriver = DbDriver(db_directory=self.directory, read_only=True)
         self.assertEqual(len(dbdriver._DbDriver__tables), 2)
-        self.assertDictEqual(dbdriver._DbDriver__tables["first_table"]._Table__data, {
-            101: {'num': 9,  'char': 'a'},
-            102: {'num': 16, 'char': 'b'},
-            103: {'num': 25, 'char': 'c'},
+        self.assertDictEqual(dbdriver._DbDriver__tables, {
+            "first_table": None, "second_table": None})
+
+        dbdriver["first_table"]
+        dbdriver["second_table"]
+
+        self.assertDictEqual(
+            dbdriver._DbDriver__tables["first_table"]._Table__data, {
+                101: {'num': 9,  'char': 'a'},
+                102: {'num': 16, 'char': 'b'},
+                103: {'num': 25, 'char': 'c'},
         })
-        self.assertDictEqual(dbdriver._DbDriver__tables["second_table"]._Table__data, {
-            0: {'num': 36, 'char': 'd'},
-            1: {'num': 49, 'char': 'e'},
-            2: {'num': 64, 'char': 'f'},
+        self.assertDictEqual(
+            dbdriver._DbDriver__tables["second_table"]._Table__data, {
+                0: {'num': 36, 'char': 'd'},
+                1: {'num': 49, 'char': 'e'},
+                2: {'num': 64, 'char': 'f'},
         })
 
         # clean up
@@ -748,8 +797,9 @@ class TestDbDriver(TestCase):
         self._make_synthetic_data()
         self.assertTrue(os.path.exists(self.directory))
         dbdriver = DbDriver(db_directory=self.directory)
-        dbdriver.create_table("names")
+        dbdriver.create_table("foo")
         dbdriver.dump_tables()
+        dbdriver.delete_table("foo")
         # act
         deleting_access_code = dbdriver.get_deleting_access()
         deleting_access_code = deleting_access_code[43:53]

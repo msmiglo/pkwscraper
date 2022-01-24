@@ -356,8 +356,9 @@ class DbDriver:
     DB can have `Table` added or deleted by `create_table` and
     `delete_table` methods, respectively.
 
-    The `_load_tables` method allows to load DB from harddrive, which
-    is done in constructor anyway. It is considered private method.
+    Tables are not loaded on constructor. Each table is loaded when
+    accesing for the first time via the square brackets. It prevents
+    from always loading big, unnecesary tables.
 
     The `dump_tables` method will save changes to harddrive.
     NOTE: when ending work with DbDriver, the changes will not be
@@ -384,7 +385,7 @@ class DbDriver:
 
         if os.path.exists(db_directory):
             # load existing directory
-            self._load_tables()
+            self._load_table_names()
         else:
             # create new directory if not read_only
             if self.__read_only:
@@ -392,7 +393,10 @@ class DbDriver:
             os.makedirs(db_directory, exist_ok=True)
 
     def __getitem__(self, name):
-        return self.__tables[name]
+        table = self.__tables[name]
+        if table is None:
+            table = self._load_table(name)
+        return table
 
     def _filepath(self, name):
         filename = f"{name}.csv"
@@ -403,6 +407,16 @@ class DbDriver:
     def read_only(self):
         """ Return the value of `read_only` parameter. """
         return bool(self.__read_only)
+
+    def _load_table_names(self):
+        # list files in directory
+        for filename in os.listdir(self.db_directory):
+            # check extension
+            if not any(filename.endswith("."+ext) for ext in EXTENSIONS):
+                continue
+            # create table entry
+            name = os.path.splitext(filename)[0]
+            self.__tables[name] = None
 
     @staticmethod
     def _load_csv(filepath):
@@ -438,26 +452,26 @@ class DbDriver:
             table_df = table_df.set_index("_id")
         return table_df
 
-    def _load_tables(self):
-        for filename in os.listdir(self.db_directory):
-            # check extension
-            if not any(filename.endswith("."+ext) for ext in EXTENSIONS):
-                continue
-
-            # load file
-            filepath = os.path.join(self.db_directory, filename)
-            if filename.endswith(".csv"):
-                table_df = self._load_csv(filepath)
-            elif filename.endswith(".xls"):
-                table_df = self._load_excel(filepath)
-            elif filename.endswith(".xlsx"):
-                table_df = self._load_excel(filepath)
-
-            # create table
-            name = os.path.splitext(filename)[0]
-            table = Table.from_df(table_df, limit=self.limit,
-                                  read_only=self.__read_only)
-            self.__tables[name] = table
+    def _load_table(self, name):
+        # get file path
+        filepath = self._filepath(name)
+        # print file size warning
+        file_size = os.path.getsize(filepath)
+        if file_size > 5e6:
+            minutes = file_size / 3e7
+            minutes = float(f"{minutes:.1g}")
+            if int(minutes) == minutes:
+                minutes = int(minutes)
+            print(f"Loading DB table `{name}` may take several minutes..."
+                  f" (max aproximately {minutes} min.)")
+        # load file
+        table_df = self._load_csv(filepath)
+        # make table
+        table = Table.from_df(table_df, limit=self.limit,
+                              read_only=self.__read_only)
+        # assign data
+        self.__tables[name] = table
+        return table
 
     def dump_tables(self):
         """
@@ -476,6 +490,9 @@ class DbDriver:
         self.__dropped_tables.clear()
         # overwrite existing tables
         for name, table in self.__tables.items():
+            if table is None:
+                # skip unchanged tables
+                continue
             filepath = self._filepath(name)
             table.to_df().to_csv(filepath, sep=";")
 
@@ -542,7 +559,7 @@ class DbDriver:
                 "Access for deleting not granted. Call `get_deleting_access` first.")
         # check access code and remove first-level files and directory
         if access_code == self.deleting_access_code:
-            for name in self.__tables:
+            for name in list(self.__tables) + self.__dropped_tables:
                 filepath = self._filepath(name)
                 if os.path.exists(filepath):
                     os.remove(filepath)
