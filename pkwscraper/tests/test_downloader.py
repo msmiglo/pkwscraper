@@ -50,10 +50,10 @@ class TestDownloader(TestCase):
         local_directory = "/nonexisting/db"
         # act
         with patch("pkwscraper.lib.downloader.os", mock_os):
-            with self.assertRaises(IOError):
-                Downloader(2015, local_directory)
+            dl = Downloader(2015, local_directory)
         # assert
         mock_os.path.isdir.assert_called_once_with(local_directory)
+        mock_os.makedirs.assert_called_once_with(local_directory, exist_ok=True)
 
     def test_init(self):
         # arrange

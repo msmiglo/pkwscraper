@@ -1,16 +1,173 @@
 
 import os
+import shutil
 from unittest import main, skip, TestCase
 from unittest.mock import call, MagicMock, patch
 
 from pandas import DataFrame, Series
+from pandas import np
 
-from pkwscraper.lib.dbdriver import DbDriver, Table
+from pkwscraper.lib.dbdriver import DbDriver, Record, Table
+
+
+'''
+def assertUUID(self, string):
+    """ UUID length changed for performance """
+    self.assertEqual(string[8], "-")
+    self.assertEqual(string[13], "-")
+    self.assertEqual(string[18], "-")
+    self.assertEqual(string[23], "-")
+    s = string.replace("-", "")
+    self.assertEqual(len(s), 32)
+    self.assertSetEqual(set(s)-set("1234567890abcdef"), set())
+'''
+
+def assertUUID(self, string):
+    self.assertEqual(string[6], "-")
+    self.assertEqual(string[11], "-")
+    s = string.replace("-", "")
+    self.assertEqual(len(s), 14)
+    self.assertSetEqual(set(s)-set("1234567890abcdef"), set())
+
+
+class TestUUID(TestCase):
+    '''
+    def test_uuid(self):
+        """ UUID length changed for performance """
+        assertUUID(self, "ab4b42d3-2bcd-0a0c-c30b-f06988fdbc12")
+        with self.assertRaises(AssertionError):
+            assertUUID(self, "ab4b42d3-2bcd-0a0c-cX0b-f06988fdbc12")
+        with self.assertRaises(AssertionError):
+            assertUUID(self, "ab4b42d3-2bcd-0a0c-c30bf06988fdbc12")
+        uuid = Table._make_uuid()
+        assertUUID(self, uuid)
+    '''
+
+    def test_uuid(self):
+        assertUUID(self, "ab4b42-2bcd-0a0c")
+        with self.assertRaises(AssertionError):
+            assertUUID(self, "ab4b42-2bXd-0a0c")
+        with self.assertRaises(AssertionError):
+            assertUUID(self, "ab4b42-2bcd0a0c")
+        uuid = Record._make_uuid()
+        assertUUID(self, uuid)
+
+
+class TestRecord(TestCase):
+    """
+    - test init
+    - test from dict            # TODO
+    - test from dict no id      # TODO
+    - test from df dict item    # TODO
+    - test get id
+    - test get field
+    - test get item
+    - test get fields lists
+    - test wrong fields
+    - test to id dict
+    - test check condition
+    - test eq
+    """
+    def setUp(self):
+        self.rec = Record({"num": 5, "char": "A"}, _id=123)
+
+    def tearDown(self):
+        pass
+
+    def test_init(self):
+        self.assertDictEqual(self.rec._Record__data, {"num": 5, "char": "A"})
+        self.assertEqual(self.rec._id, 123)
+
+    def test_from_dict(self):
+        rec_2 = Record.from_dict(
+            {"num": 6, "char": "B", "_id": 456})
+        self.assertDictEqual(rec_2._Record__data, {"num": 6, "char": "B"})
+        self.assertEqual(rec_2._id, 456)
+
+        rec_3 = Record.from_dict(
+            {"num": 7, "char": "C", "_id": 456}, _id=789)
+        self.assertDictEqual(rec_3._Record__data, {"num": 7, "char": "C"})
+        self.assertEqual(rec_3._id, 789)
+
+    def test_from_dict_no_id(self):
+        rec = Record.from_dict({"num": 5, "char": "A"})
+        self.assertDictEqual(rec._Record__data, {"num": 5, "char": "A"})
+        assertUUID(self, rec._id)
+
+    def test_from_df_dict_item(self):
+        rec = Record.from_df_dict_item((
+            123, {"num": 5, "char": "A"}))
+        self.assertDictEqual(rec._Record__data, {"num": 5, "char": "A"})
+        self.assertEqual(rec._id, 123)
+
+        rec_2 = Record.from_df_dict_item((
+            456, {"num": 6, "char": "B", "1null": None, "2null": np.nan}))
+        self.assertDictEqual(rec_2._Record__data, {"num": 6, "char": "B"})
+        self.assertEqual(rec_2._id, 456)
+
+        rec_3 = Record.from_df_dict_item((
+            789, {"num": 0, "text": "", "bool": False}))
+        self.assertDictEqual(
+            rec_3._Record__data, {"num": 0, "text": "", "bool": False})
+        self.assertEqual(rec_3._id, 789)
+
+    def test_get_id(self):
+        rec_id = self.rec.get_field_or_id("_id")
+        self.assertEqual(rec_id, 123)
+
+    def test_get_field(self):
+        rec_field = self.rec.get_field_or_id("char")
+        self.assertEqual(rec_field, "A")
+
+    def test_get_item(self):
+        rec_id = self.rec["_id"]
+        rec_field = self.rec["char"]
+        self.assertEqual(rec_id, 123)
+        self.assertEqual(rec_field, "A")
+
+    def test_get_fields_list(self):
+        result = self.rec.get_fields_list(["char", "_id", "char", "num"])
+        self.assertListEqual(rec_field, ["A", 123, "A", 5])
+
+    def test_get_fields_list(self):
+        with self.assertRaises(TypeError) as e:
+            self.rec.get_fields_list(("char", "num"))
+        self.assertEqual(
+            e.exception.args[0],
+            "`fields` should be of one of types: `None`, `str` or `list`. "
+            "got: <class 'tuple'>"
+        )
+
+    def test_to_id_dict(self):
+        rec_id, rec_data = self.rec.to_id_dict()
+        self.assertEqual(rec_id, 123)
+        self.assertDictEqual(rec_data, {"num": 5, "char": "A"})
+
+    def test_check_condition(self):
+        self.assertTrue(self.rec.check_condition({}))
+        self.assertTrue(self.rec.check_condition({"char": "A"}))
+        self.assertFalse(self.rec.check_condition({"char": "B"}))
+        self.assertTrue(self.rec.check_condition({"char": "A", "num": 5}))
+        self.assertFalse(self.rec.check_condition({"char": "A", "num": 6}))
+        self.assertFalse(self.rec.check_condition({"char": "B", "num": 6}))
+        self.assertFalse(self.rec.check_condition(
+            {"char": "A", "other": None}))
+        self.assertFalse(self.rec.check_condition({"other": "A"}))
+        self.assertFalse(self.rec.check_condition({"_id": 123}))
+        self.assertFalse(self.rec.check_condition({"_id": 147}))
+
+    def test_eq(self):
+        rec_2 = Record.from_dict({"char": "A", "num": 5}, _id=456)
+        self.assertEqual(self.rec, rec_2)
+
+        rec_3 = Record.from_dict({"char": "B", "num": 5}, _id=123)
+        self.assertNotEqual(self.rec, rec_3)
+
+        self.assertEqual(self.rec, {"char": "A", "num": 5})
 
 
 class TestTable(TestCase):
     """
-    - test uuid
     - test put
     - test get
     - test find
@@ -31,46 +188,10 @@ class TestTable(TestCase):
     def tearDown(self):
         pass
 
-    '''def assertUUID(self, string):
-        """ UUID length changed for performance """
-        self.assertEqual(string[8], "-")
-        self.assertEqual(string[13], "-")
-        self.assertEqual(string[18], "-")
-        self.assertEqual(string[23], "-")
-        s = string.replace("-", "")
-        self.assertEqual(len(s), 32)
-        self.assertSetEqual(set(s)-set("1234567890abcdef"), set())'''
-
-    def assertUUID(self, string):
-        self.assertEqual(string[6], "-")
-        self.assertEqual(string[11], "-")
-        s = string.replace("-", "")
-        self.assertEqual(len(s), 14)
-        self.assertSetEqual(set(s)-set("1234567890abcdef"), set())
-
-    '''def test_uuid(self):
-        """ UUID length changed for performance """
-        self.assertUUID("ab4b42d3-2bcd-0a0c-c30b-f06988fdbc12")
-        with self.assertRaises(AssertionError):
-            self.assertUUID("ab4b42d3-2bcd-0a0c-cX0b-f06988fdbc12")
-        with self.assertRaises(AssertionError):
-            self.assertUUID("ab4b42d3-2bcd-0a0c-c30bf06988fdbc12")
-        uuid = Table._make_uuid()
-        self.assertUUID(uuid)'''
-
-    def test_uuid(self):
-        self.assertUUID("ab4b42-2bcd-0a0c")
-        with self.assertRaises(AssertionError):
-            self.assertUUID("ab4b42-2bXd-0a0c")
-        with self.assertRaises(AssertionError):
-            self.assertUUID("ab4b42-2bcd0a0c")
-        uuid = Table._make_uuid()
-        self.assertUUID(uuid)
-
     def test_table_put(self):
         t = Table()
         id_1 = t.put({"a": 5, "b": 9})
-        self.assertUUID(id_1)
+        assertUUID(self, id_1)
         self.assertDictEqual(t._Table__data, {
             id_1: {"a": 5, "b": 9}
         })
@@ -281,13 +402,17 @@ class TestDbDriver(TestCase):
     for underlying pandas library and file system communication.
 
     - test get item
+    - test get item no loaded
     - test filepath
+    - test read only
     - test create table
     - test delete table
-    - test load tables
+    - test load table names
+    - test load table
     - test dump tables
 
     - test init not exists
+    - test init nested directory
     - test init exists
     - test read only errors
     - test load csv
@@ -309,7 +434,7 @@ class TestDbDriver(TestCase):
 
         # check if there is directory left from previous tests
         if os.path.exists(self.directory):
-            raise RuntimeError("Cannot operate on testing directory on harddrive.")
+            raise RuntimeError("Cannot operate on not-cleaned testing directory on harddrive.")
 
     def tearDown(self):
         # check if the testing directory was cleared by test
@@ -342,13 +467,29 @@ class TestDbDriver(TestCase):
 
     def test_get_item(self):
         """ Unit test """
-        dbdriver = DbDriver.__new__(DbDriver) # MagicMock(DbDriver)
+        dbdriver = DbDriver.__new__(DbDriver)
         table = MagicMock()
         dbdriver._DbDriver__tables = {"MyTable": table}
+        dbdriver._load_table = MagicMock()
 
         with self.assertRaises(KeyError):
             dbdriver["NotExistingTable"]
         result = dbdriver["MyTable"]
+        dbdriver._load_table.assert_not_called()
+        self.assertIs(result, table)
+
+    def test_get_item_not_loaded(self):
+        """ Unit test """
+        # arrange
+        dbdriver = DbDriver.__new__(DbDriver)
+        table = MagicMock()
+        dbdriver._DbDriver__tables = {"MyTable": None}
+        dbdriver._load_table = MagicMock()
+        dbdriver._load_table.return_value = table
+        # act
+        result = dbdriver["MyTable"]
+        # assert
+        dbdriver._load_table.assert_called_once_with("MyTable")
         self.assertIs(result, table)
 
     def test_filepath(self):
@@ -363,6 +504,18 @@ class TestDbDriver(TestCase):
         result = DbDriver._filepath(dbdriver, name)
         # assert
         self.assertIn(result, expected)
+
+    def test_read_only(self):
+        """ Unit test """
+        dbdriver = DbDriver.__new__(DbDriver)
+
+        dbdriver._DbDriver__read_only = True
+        self.assertTrue(dbdriver.read_only)
+        dbdriver._DbDriver__read_only = False
+        self.assertFalse(dbdriver.read_only)
+
+        with self.assertRaises(TypeError):
+            dbdriver.read_only()
 
     def test_create_table(self):
         """ Unit test """
@@ -394,7 +547,8 @@ class TestDbDriver(TestCase):
 
         mock_db = MagicMock()
         mock_db._DbDriver__read_only = False
-        mock_db._DbDriver__tables = {table_name: mock_table, "other": mock_table_2}
+        mock_db._DbDriver__tables = {
+            table_name: mock_table, "other": mock_table_2}
         mock_db._DbDriver__dropped_tables = []
 
         # act
@@ -404,7 +558,7 @@ class TestDbDriver(TestCase):
         self.assertDictEqual(mock_db._DbDriver__tables, {"other": mock_table_2})
         self.assertListEqual(mock_db._DbDriver__dropped_tables, [table_name])
 
-    def test_load_tables(self):
+    def test_load_table_names(self):
         """ Unit test """
         # arrange
         table_filenames = ["labada.csv", "macarena.csv"]
@@ -413,42 +567,69 @@ class TestDbDriver(TestCase):
 
         mock_db = MagicMock()
         mock_db.db_directory = self.directory
+
+        mock_db.limit = None
+        mock_db._DbDriver__read_only = True
+        mock_db._DbDriver__tables = {}
+
+        # act
+        with patch("pkwscraper.lib.dbdriver.os.listdir", mock_os_listdir):
+            DbDriver._load_table_names(mock_db)
+
+        # assert
+        mock_os_listdir.assert_called_once_with(self.directory)
+
+        mock_db._load_excel.assert_not_called()
+        mock_db._load_csv.assert_not_called()
+        mock_db._load.assert_not_called()
+
+        self.assertDictEqual(mock_db._DbDriver__tables, {
+            "labada": None,
+            "macarena": None
+        })
+
+    def test_load_table(self):
+        """ Unit test """
+        # arrange
+        table_name = "labada"
+        filepath = os.path.join(self.directory, "labada.csv")
+
+        mock_db = MagicMock()
+        mock_db.db_directory = self.directory
         mock_df = MagicMock()
-        mock_df_2 = MagicMock()
-        mock_db._load_csv.side_effect = [mock_df, mock_df_2]
+        mock_db._load_csv.return_value = mock_df
+        mock_db._filepath.return_value = filepath
 
         mock_db.limit = None
         mock_db._DbDriver__read_only = True
         mock_db._DbDriver__tables = {}
 
         mock_table = MagicMock()
-        mock_table_2 = MagicMock()
         MockTableClass = MagicMock()
-        MockTableClass.from_df.side_effect = [mock_table, mock_table_2]
+        MockTableClass.from_df.return_value = mock_table
+
+        mock_os_path_size = MagicMock()
+        mock_os_path_size.return_value = 1000
 
         # act
         with patch("pkwscraper.lib.dbdriver.Table", MockTableClass):
-            with patch("pkwscraper.lib.dbdriver.os.listdir", mock_os_listdir):
-                DbDriver._load_tables(mock_db)
+            with patch("pkwscraper.lib.dbdriver.os.path.getsize",
+                       mock_os_path_size):
+                result = DbDriver._load_table(mock_db, table_name)
 
         # assert
-        mock_os_listdir.assert_called_once_with(self.directory)
-
+        mock_db._filepath.assert_called_once_with(table_name)
         mock_db._load_excel.assert_not_called()
-        mock_db._load_csv.assert_has_calls([
-            call(os.path.join(self.directory, "labada.csv")),
-            call(os.path.join(self.directory, "macarena.csv"))
-        ])
+        mock_db._load_csv.assert_called_once_with(filepath)
+        mock_os_path_size.assert_called_once_with(filepath)
 
-        MockTableClass.from_df.assert_has_calls([
-            call(mock_df, limit=None, read_only=True),
-            call(mock_df_2, limit=None, read_only=True)
-        ])
+        MockTableClass.from_df.assert_called_once_with(
+            mock_df, limit=None, read_only=True)
 
         self.assertDictEqual(mock_db._DbDriver__tables, {
-            "labada": mock_table,
-            "macarena": mock_table_2
+            "labada": mock_table
         })
+        self.assertIs(result, mock_table)
 
     def test_dump_tables(self):
         """ Unit test """
@@ -456,7 +637,8 @@ class TestDbDriver(TestCase):
         mock_table = MagicMock()
         mock_db = MagicMock()
         mock_db._DbDriver__read_only = False
-        mock_db._DbDriver__tables = {"new_table": mock_table}
+        mock_db._DbDriver__tables = {
+            "new_table": mock_table, "not_changed_table": None}
         mock_db._DbDriver__dropped_tables = ["old_table", "missing_table"]
         mock_db._filepath.side_effect = [
             "./here/old_table.csv",
@@ -508,6 +690,24 @@ class TestDbDriver(TestCase):
         # clean up
         os.rmdir(self.directory)
 
+    def test_init_nested_directory(self):
+        db_directory = self.directory + "other/directory/level/"
+
+        # prepare DB
+        dbdriver = DbDriver(db_directory=db_directory)
+        dbdriver.create_table("test")
+        dbdriver.dump_tables()
+
+        # assert
+        self.assertEqual(dbdriver.db_directory, db_directory)
+        self.assertTrue(os.path.exists(db_directory))
+        self.assertTrue(os.path.exists(db_directory + "test.csv"))
+
+        # clean up
+        shutil.rmtree(self.directory)
+
+        self.assertFalse(os.path.exists(db_directory))
+
     def test_init_exists(self):
         # create some synthetic tables data
         self._make_synthetic_data()
@@ -515,15 +715,23 @@ class TestDbDriver(TestCase):
         # test tables data
         dbdriver = DbDriver(db_directory=self.directory, read_only=True)
         self.assertEqual(len(dbdriver._DbDriver__tables), 2)
-        self.assertDictEqual(dbdriver._DbDriver__tables["first_table"]._Table__data, {
-            101: {'num': 9,  'char': 'a'},
-            102: {'num': 16, 'char': 'b'},
-            103: {'num': 25, 'char': 'c'},
+        self.assertDictEqual(dbdriver._DbDriver__tables, {
+            "first_table": None, "second_table": None})
+
+        dbdriver["first_table"]
+        dbdriver["second_table"]
+
+        self.assertDictEqual(
+            dbdriver._DbDriver__tables["first_table"]._Table__data, {
+                101: {'num': 9,  'char': 'a'},
+                102: {'num': 16, 'char': 'b'},
+                103: {'num': 25, 'char': 'c'},
         })
-        self.assertDictEqual(dbdriver._DbDriver__tables["second_table"]._Table__data, {
-            0: {'num': 36, 'char': 'd'},
-            1: {'num': 49, 'char': 'e'},
-            2: {'num': 64, 'char': 'f'},
+        self.assertDictEqual(
+            dbdriver._DbDriver__tables["second_table"]._Table__data, {
+                0: {'num': 36, 'char': 'd'},
+                1: {'num': 49, 'char': 'e'},
+                2: {'num': 64, 'char': 'f'},
         })
 
         # clean up
@@ -595,8 +803,9 @@ class TestDbDriver(TestCase):
         self._make_synthetic_data()
         self.assertTrue(os.path.exists(self.directory))
         dbdriver = DbDriver(db_directory=self.directory)
-        dbdriver.create_table("names")
+        dbdriver.create_table("foo")
         dbdriver.dump_tables()
+        dbdriver.delete_table("foo")
         # act
         deleting_access_code = dbdriver.get_deleting_access()
         deleting_access_code = deleting_access_code[43:53]
