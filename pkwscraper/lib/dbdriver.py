@@ -9,10 +9,133 @@ EXTENSIONS = ['csv', 'xls', 'xlsx']
 SHORT_UUID = True
 
 
+class Record:
+    """
+    `Record` class contains single record of table with its ID.
+
+    If no ID is given in contructor - it is created as UUID. This
+    prevents mistakes made when one tries to choose record by ID
+    that comes from another table.
+
+    `Record` class is only used to store data, it is not returned
+    by any public method. It is NOT intended to use directly with
+    `Table` instances. But it can be used for other purposes.
+    """
+    HEX_DIGITS = list('0123456789abcdef')
+    if SHORT_UUID:
+        # for memory performance
+        UUID_PARTS = (6, 4, 4)
+    else:
+        UUID_PARTS = (8, 4, 4, 4, 12)
+
+    def __init__(self, record, _id):
+        self.__data = record
+        self._id = _id
+
+    @classmethod
+    def from_dict(cls, record, _id=None):
+        """ Create new Record. Just regular way of doing it. """
+        # copy dict
+        record = dict(record)
+
+        # get record id and remove it from record
+        record_id = record.pop("_id", None)
+        if _id is None:
+            _id = record_id
+        if _id is None:
+            _id = cls._make_uuid()
+
+        # make record
+        return cls(record, _id)
+
+    @classmethod
+    def from_df_dict_item(cls, item):
+        """
+        Create record. Custom method used when reading a csv file,
+        with optimized performance.
+        """
+        # unpack dict item
+        _id, record = item
+
+        # drop null values
+        record = {name: value
+                  for name, value in record.items()
+                  if not pd.isna(value)}
+
+        # make record
+        return Record(record, _id)
+
+    @staticmethod
+    def _hex_string(k):
+        """ Return k-length hex-digit string. """
+        sample = random.choices(Record.HEX_DIGITS, k=k)
+        return "".join(sample)
+
+    @staticmethod
+    def _make_uuid():
+        """ This is just pretending to be UUID. """
+        parts = [Record._hex_string(k) for k in Record.UUID_PARTS]
+        return "-".join(parts)
+
+    def get_field_or_id(self, name):
+        """
+        Return ID or value of field.
+
+        name: str - name of given field
+        """
+        if name == "_id":
+            return self._id
+        return self.__data.get(name)
+
+    def get_fields_list(self, fields):
+        """
+        Return list of values for given fields.
+        """
+        # choose one value
+        if isinstance(fields, str):
+            return self.get_field_or_id(fields)
+
+        # choose only values matching given fields
+        if isinstance(fields, list):
+            return [self.get_field_or_id(field) for field in fields]
+
+        raise TypeError(f"`fields` should be of one of types: "
+                        f"`None`, `str` or `list`. got: {type(fields)}")
+
+    def to_id_dict(self):
+        """
+        Return ID and dict of key-value pairs.
+        """
+        return self._id, dict(self.__data)
+
+    def to_dict(self):
+        """
+        Return copy of dict data.
+        """
+        return dict(self.__data)
+
+    def check_condition(self, query_dict):
+        """
+        Check if record matches given query.
+        """
+        return all(key in self.__data and self.__data[key] == value
+                   for key, value in query_dict.items())
+
+    def __getitem__(self, name):
+        return self.get_field_or_id(name)
+
+    def __eq__(self, other):
+        if isinstance(other, Record):
+            return self.__data == other.__data
+        if isinstance(other, dict):
+            return self.__data == other
+        return false
+
+
 class Table:
     """
     `Table` class represents DB Table containing records with given
-    id's. Constructor creates empty table. `from_df` method gets
+    IDs. Constructor creates empty table. `from_df` method gets
     data from `pandas.DataFrame` object.
 
     `Table` can be created as read only - the modifying and
@@ -27,14 +150,14 @@ class Table:
     `find(query={field_name_1: value_1, field_name_2: value_2})`
 
     This will return all records which have the given fields with
-    given values. The return structure is `dict` of records with its
-    ID as key. Records are represented as "documents" which are
+    given values. The return structure is `dict` of records with their
+    IDs as keys. Records are represented as "documents" which are
     dictionaries of `name: value` pairs. Names of fields in records
     can be anything, except "_id" field, which is the record ID.
 
     The `find_one` method can be used to return just one result
     (first found). It takes the same kind of query. It returns the
-    id of record, and the record itself (so the tuple is returned).
+    ID of record, and the record itself (so the tuple is returned).
     If there isn't any record matching the query, the `None` is
     returned.
     NOTE: just a single None object will be returned, not a tuple.
@@ -52,27 +175,20 @@ class Table:
     method in such case will return list of lists of values.
 
     Writing records to `Table` can be done via `put` method. It takes
-    the ID of new record and dict with name: value pairs. If the ID
-    is not provided - a UUID is generated. If the provided ID
-    duplicates an existing one - the record will be overwritten. It
-    can be used for modifying records also.
+    the ID of new record and dict with `name: value` pairs. If the ID
+    is not provided - a (pretended) UUID is generated. If the provided
+    ID duplicates an existing one - the record will be overwritten. This
+    behaviour can be also used for modifying records.
 
     Deleting or modifying records must be done manually. It is not
     supported as it is not needed for this project.
 
-    `Table` can be converted to `pandas.DataFrame` without loss of data
-    and vice versa - it can be loaded from `pandas.DataFrame`, but
+    `Table` can be converted to `pandas.DataFrame` without loss of data.
+    And vice versa - it can be loaded from `pandas.DataFrame`, but
     this time it is not guaranteed to support all strange features
     of `DataFrame`. Shortly said - `Table` can be converted to DF and
     back and it will stay the same.
     """
-    HEX_DIGITS = list('0123456789abcdef')
-    if SHORT_UUID:
-        # for memory performance
-        UUID_PARTS = (6, 4, 4)
-    else:
-        UUID_PARTS = (8, 4, 4, 4, 12)
-
     def __init__(self, read_only=False):
         self.__read_only = read_only
         self.__data = {}
@@ -80,6 +196,8 @@ class Table:
     @classmethod
     def from_df(cls, df, limit=None, read_only=False):
         """
+        Read table from DataFrame and make table from it.
+
         df: pandas.DataFrame - data structure containing table data
         limit: None/int - maximum number of records to be loaded
         read_only: bool - if table has to be protected from changing
@@ -88,148 +206,138 @@ class Table:
         """
         # create new table
         table = cls(read_only=read_only)
-        # rescribe data
+
+        # convert to python data structures
         dict_data = df.iloc[:limit].T.to_dict('dict')
-        dict_data = {
-            _id: {
-                name: value
-                for name, value in rec.items()
-                if not pd.isna(value)
-            }
-            for _id, rec in dict_data.items()
-        }
+
+        # make records
+        records = [Record.from_df_dict_item(item)
+                   for item in dict_data.items()]
+
+        # make records dictionary
+        records_data = {rec._id: rec for rec in records}
+
         # assign to new table
-        table.__data = dict_data
+        table.__data = records_data
         return table
 
     def to_df(self):
         """
+        Convert table to DataFrame.
+
         returns: pandas.DataFrame
         """
         # check read only
         if self.__read_only:
             raise IOError("Table is for read only.")
+
+        # convert data to dicts
+        data = dict(record.to_id_dict()
+                    for record in self.__data.values())
+
         # make data frame
-        df = pd.DataFrame(self.__data).T
+        df = pd.DataFrame(data).T
         df.index.name = "_id"
         return df
 
-    @staticmethod
-    def _hex_string(k):
-        """ Returns k-length hex-digit string. """
-        sample = random.choices(Table.HEX_DIGITS, k=k)
-        return "".join(sample)
-
-    @staticmethod
-    def _make_uuid():
-        parts = [Table._hex_string(k) for k in Table.UUID_PARTS]
-        return "-".join(parts)
-
     def put(self, record, _id=None, __force=False):
         """
-        record: dict - record with `name: value` pairs
-        _id: key for record or None
+        Put record in table. Note that `_id` is not stored in record
+        dict, but as a record key in table. The `_id` can be however
+        passed in record dict - it will be popped from it and used as
+        a record ID. However the explicit passing of `_id` argument has
+        the priority.
 
-        returns: Table
+        record: dict - record with `name: value` pairs
+        _id: key for record or `None`
+
+        returns: record ID
         """
         # check read only
         if self.__read_only and not __force:
             raise IOError("Table is for read only.")
-        # copy dict
-        record = dict(record)
 
-        # get record id and remove it from record
-        record_id = record.pop("_id", None)
-        if _id is None:
-            _id = record_id
-        if _id is None:
-            # usign UUID prevents from mistakes when someone choses
-            # records, using ID from another table
-            _id = self._make_uuid()
+        # make record
+        record = Record.from_dict(record, _id)
 
         # add record to data
+        _id = record._id
         self.__data[_id] = record
         return _id
 
     def __getitem__(self, _id):
-        return dict(self.__data[_id])
-
-    @staticmethod
-    def _get_id_or_field(_id, record, field):
-        if field == "_id":
-            return _id
-        return record.get(field)
-
-    def _find(self, query):
-        # return all if no criterions
-        if len(query) == 0:
-            return dict(self.__data)
-        # copy matching results and return
-        result = {}
-        for _id, record in self.__data.items():
-            if all(key in record and record[key] == value
-                   for key, value in query.items()):
-                result[_id] = dict(record)
-        return result
+        return self.__data[_id].to_dict()
 
     def find(self, query, fields=None):
         """
+        Find all records matching the query.
+
         query: dict - dictionary with fields and values to be matched
             in searched records
         fields: key/list/None - keys that has to be included in results
 
-        returns: dict/list
+        returns:
+            dict - if `fields` is None
+            list - when `fields` specified
         """
-        # get raw results
-        results = self._find(query)
-        # return raw results if fields not given
+        # get records matching query
+        records = [rec for rec in self.__data.values()
+                   if rec.check_condition(query)]
+
+        # handle `fields` argument
         if fields is None:
-            return results
-        # chose one value from each record
-        if isinstance(fields, str):
-            return [self._get_id_or_field(_id, record, fields)
-                    for _id, record in results.items()]
-        # chose only values matching given fields
-        if isinstance(fields, list):
-            return [[self._get_id_or_field(_id, record, field)
-                    for field in fields]
-                    for _id, record in results.items()]
-        raise TypeError(f"`fields` should be of one of types: "
-                        "`None`, `str` or `list`. got: {type(fields)}")
+            # return raw results if fields not given
+            results = dict(rec.to_id_dict() for rec in records)
+        elif isinstance(fields, str):
+            # chose one value from each record
+            results = [rec[fields] for rec in records]
+        elif isinstance(fields, list):
+            # chose only values matching given fields
+            results = [rec.get_fields_list(fields) for rec in records]
+        else:
+            raise TypeError(f"`fields` should be of one of types: "
+                            f"`None`, `str` or `list`. got: {type(fields)}")
+
+        return results
 
     def _find_one(self, query):
-        for _id, record in self.__data.items():
-            if all(key in record and record[key] == value
-                   for key, value in query.items()):
-                return _id, dict(record)
+        for record in self.__data.values():
+            if record.check_condition(query):
+                return record
 
     def find_one(self, query, fields=None):
         """
+        Find only one record - the first matching the query.
+
         query: dict - dictionary with fields and values to be matched
             in searched records
         fields: key/list/None - keys that has to be included in results
 
-        returns: dict/value/None
+        returns:
+            None - if record not found
+            (_id, dict) tuple - when `fields` is None
+            single value - if `fields` specify single key name
+            list - if `fields` is a list of keys
         """
         # get raw result
-        one = self._find_one(query)
+        record = self._find_one(query)
         # if no result found
-        if one is None:
+        if record is None:
             return None
-        # unpack the result
-        _id, record = one
-        # if fields not given - return raw result
+        # handle `fields` parameter
         if fields is None:
-            return _id, record
-        # chose one value
-        if isinstance(fields, str):
-            return self._get_id_or_field(_id, record, fields)
-        # chose only values matching given fields
-        if isinstance(fields, list):
-            return [self._get_id_or_field(_id, record, field)
-                    for field in fields]
-        raise TypeError(f"`fields` should be of one of types: "
-                        "`None`, `str` or `list`. got: {type(fields)}")
+            # if fields not given - return raw result
+            result = record.to_id_dict()
+        elif isinstance(fields, str):
+            # chose one value
+            result = record[fields]
+        elif isinstance(fields, list):
+            # chose only values matching given fields
+            result = record.get_fields_list(fields)
+        else:
+            raise TypeError(f"`fields` should be of one of types: "
+                            f"`None`, `str` or `list`. got: {type(fields)}")
+        return result
 
 
 class DbDriver:
@@ -248,8 +356,8 @@ class DbDriver:
     DB can have `Table` added or deleted by `create_table` and
     `delete_table` methods, respectively.
 
-    The `load_tables` method allows to load DB from harddrive, which
-    is done in constructor anyway.
+    The `_load_tables` method allows to load DB from harddrive, which
+    is done in constructor anyway. It is considered private method.
 
     The `dump_tables` method will save changes to harddrive.
     NOTE: when ending work with DbDriver, the changes will not be
@@ -259,7 +367,7 @@ class DbDriver:
     def __init__(self, db_directory, limit=None, read_only=False):
         """
         db_directory: str - directory which contains DB tables
-        limit: int/None - max numbers of records to be loaded in one table
+        limit: int/None - max numbers of records to be loaded to each table
         read_only: bool - whether to protect DB from changes
         """
         # initialize attributes
@@ -293,6 +401,7 @@ class DbDriver:
 
     @property
     def read_only(self):
+        """ Return the value of `read_only` parameter. """
         return bool(self.__read_only)
 
     @staticmethod
@@ -418,7 +527,7 @@ class DbDriver:
 
     def delete(self, access_code):
         """
-        Deletion of entire DB from harddrive directory, including the
+        Delete entire DB from harddrive directory, including the
         directory. The access code must be extracted from
         `get_deleting_access` method for the security reason. Deleting
         the directories on harddrive needs confirmation, because it

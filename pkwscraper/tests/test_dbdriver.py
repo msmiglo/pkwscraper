@@ -5,13 +5,169 @@ from unittest import main, skip, TestCase
 from unittest.mock import call, MagicMock, patch
 
 from pandas import DataFrame, Series
+from pandas import np
 
-from pkwscraper.lib.dbdriver import DbDriver, Table
+from pkwscraper.lib.dbdriver import DbDriver, Record, Table
+
+
+'''
+def assertUUID(self, string):
+    """ UUID length changed for performance """
+    self.assertEqual(string[8], "-")
+    self.assertEqual(string[13], "-")
+    self.assertEqual(string[18], "-")
+    self.assertEqual(string[23], "-")
+    s = string.replace("-", "")
+    self.assertEqual(len(s), 32)
+    self.assertSetEqual(set(s)-set("1234567890abcdef"), set())
+'''
+
+def assertUUID(self, string):
+    self.assertEqual(string[6], "-")
+    self.assertEqual(string[11], "-")
+    s = string.replace("-", "")
+    self.assertEqual(len(s), 14)
+    self.assertSetEqual(set(s)-set("1234567890abcdef"), set())
+
+
+class TestUUID(TestCase):
+    '''
+    def test_uuid(self):
+        """ UUID length changed for performance """
+        assertUUID(self, "ab4b42d3-2bcd-0a0c-c30b-f06988fdbc12")
+        with self.assertRaises(AssertionError):
+            assertUUID(self, "ab4b42d3-2bcd-0a0c-cX0b-f06988fdbc12")
+        with self.assertRaises(AssertionError):
+            assertUUID(self, "ab4b42d3-2bcd-0a0c-c30bf06988fdbc12")
+        uuid = Table._make_uuid()
+        assertUUID(self, uuid)
+    '''
+
+    def test_uuid(self):
+        assertUUID(self, "ab4b42-2bcd-0a0c")
+        with self.assertRaises(AssertionError):
+            assertUUID(self, "ab4b42-2bXd-0a0c")
+        with self.assertRaises(AssertionError):
+            assertUUID(self, "ab4b42-2bcd0a0c")
+        uuid = Record._make_uuid()
+        assertUUID(self, uuid)
+
+
+class TestRecord(TestCase):
+    """
+    - test init
+    - test from dict            # TODO
+    - test from dict no id      # TODO
+    - test from df dict item    # TODO
+    - test get id
+    - test get field
+    - test get item
+    - test get fields lists
+    - test wrong fields
+    - test to id dict
+    - test check condition
+    - test eq
+    """
+    def setUp(self):
+        self.rec = Record({"num": 5, "char": "A"}, _id=123)
+
+    def tearDown(self):
+        pass
+
+    def test_init(self):
+        self.assertDictEqual(self.rec._Record__data, {"num": 5, "char": "A"})
+        self.assertEqual(self.rec._id, 123)
+
+    def test_from_dict(self):
+        rec_2 = Record.from_dict(
+            {"num": 6, "char": "B", "_id": 456})
+        self.assertDictEqual(rec_2._Record__data, {"num": 6, "char": "B"})
+        self.assertEqual(rec_2._id, 456)
+
+        rec_3 = Record.from_dict(
+            {"num": 7, "char": "C", "_id": 456}, _id=789)
+        self.assertDictEqual(rec_3._Record__data, {"num": 7, "char": "C"})
+        self.assertEqual(rec_3._id, 789)
+
+    def test_from_dict_no_id(self):
+        rec = Record.from_dict({"num": 5, "char": "A"})
+        self.assertDictEqual(rec._Record__data, {"num": 5, "char": "A"})
+        assertUUID(self, rec._id)
+
+    def test_from_df_dict_item(self):
+        rec = Record.from_df_dict_item((
+            123, {"num": 5, "char": "A"}))
+        self.assertDictEqual(rec._Record__data, {"num": 5, "char": "A"})
+        self.assertEqual(rec._id, 123)
+
+        rec_2 = Record.from_df_dict_item((
+            456, {"num": 6, "char": "B", "1null": None, "2null": np.nan}))
+        self.assertDictEqual(rec_2._Record__data, {"num": 6, "char": "B"})
+        self.assertEqual(rec_2._id, 456)
+
+        rec_3 = Record.from_df_dict_item((
+            789, {"num": 0, "text": "", "bool": False}))
+        self.assertDictEqual(
+            rec_3._Record__data, {"num": 0, "text": "", "bool": False})
+        self.assertEqual(rec_3._id, 789)
+
+    def test_get_id(self):
+        rec_id = self.rec.get_field_or_id("_id")
+        self.assertEqual(rec_id, 123)
+
+    def test_get_field(self):
+        rec_field = self.rec.get_field_or_id("char")
+        self.assertEqual(rec_field, "A")
+
+    def test_get_item(self):
+        rec_id = self.rec["_id"]
+        rec_field = self.rec["char"]
+        self.assertEqual(rec_id, 123)
+        self.assertEqual(rec_field, "A")
+
+    def test_get_fields_list(self):
+        result = self.rec.get_fields_list(["char", "_id", "char", "num"])
+        self.assertListEqual(rec_field, ["A", 123, "A", 5])
+
+    def test_get_fields_list(self):
+        with self.assertRaises(TypeError) as e:
+            self.rec.get_fields_list(("char", "num"))
+        self.assertEqual(
+            e.exception.args[0],
+            "`fields` should be of one of types: `None`, `str` or `list`. "
+            "got: <class 'tuple'>"
+        )
+
+    def test_to_id_dict(self):
+        rec_id, rec_data = self.rec.to_id_dict()
+        self.assertEqual(rec_id, 123)
+        self.assertDictEqual(rec_data, {"num": 5, "char": "A"})
+
+    def test_check_condition(self):
+        self.assertTrue(self.rec.check_condition({}))
+        self.assertTrue(self.rec.check_condition({"char": "A"}))
+        self.assertFalse(self.rec.check_condition({"char": "B"}))
+        self.assertTrue(self.rec.check_condition({"char": "A", "num": 5}))
+        self.assertFalse(self.rec.check_condition({"char": "A", "num": 6}))
+        self.assertFalse(self.rec.check_condition({"char": "B", "num": 6}))
+        self.assertFalse(self.rec.check_condition(
+            {"char": "A", "other": None}))
+        self.assertFalse(self.rec.check_condition({"other": "A"}))
+        self.assertFalse(self.rec.check_condition({"_id": 123}))
+        self.assertFalse(self.rec.check_condition({"_id": 147}))
+
+    def test_eq(self):
+        rec_2 = Record.from_dict({"char": "A", "num": 5}, _id=456)
+        self.assertEqual(self.rec, rec_2)
+
+        rec_3 = Record.from_dict({"char": "B", "num": 5}, _id=123)
+        self.assertNotEqual(self.rec, rec_3)
+
+        self.assertEqual(self.rec, {"char": "A", "num": 5})
 
 
 class TestTable(TestCase):
     """
-    - test uuid
     - test put
     - test get
     - test find
@@ -32,46 +188,10 @@ class TestTable(TestCase):
     def tearDown(self):
         pass
 
-    '''def assertUUID(self, string):
-        """ UUID length changed for performance """
-        self.assertEqual(string[8], "-")
-        self.assertEqual(string[13], "-")
-        self.assertEqual(string[18], "-")
-        self.assertEqual(string[23], "-")
-        s = string.replace("-", "")
-        self.assertEqual(len(s), 32)
-        self.assertSetEqual(set(s)-set("1234567890abcdef"), set())'''
-
-    def assertUUID(self, string):
-        self.assertEqual(string[6], "-")
-        self.assertEqual(string[11], "-")
-        s = string.replace("-", "")
-        self.assertEqual(len(s), 14)
-        self.assertSetEqual(set(s)-set("1234567890abcdef"), set())
-
-    '''def test_uuid(self):
-        """ UUID length changed for performance """
-        self.assertUUID("ab4b42d3-2bcd-0a0c-c30b-f06988fdbc12")
-        with self.assertRaises(AssertionError):
-            self.assertUUID("ab4b42d3-2bcd-0a0c-cX0b-f06988fdbc12")
-        with self.assertRaises(AssertionError):
-            self.assertUUID("ab4b42d3-2bcd-0a0c-c30bf06988fdbc12")
-        uuid = Table._make_uuid()
-        self.assertUUID(uuid)'''
-
-    def test_uuid(self):
-        self.assertUUID("ab4b42-2bcd-0a0c")
-        with self.assertRaises(AssertionError):
-            self.assertUUID("ab4b42-2bXd-0a0c")
-        with self.assertRaises(AssertionError):
-            self.assertUUID("ab4b42-2bcd0a0c")
-        uuid = Table._make_uuid()
-        self.assertUUID(uuid)
-
     def test_table_put(self):
         t = Table()
         id_1 = t.put({"a": 5, "b": 9})
-        self.assertUUID(id_1)
+        assertUUID(self, id_1)
         self.assertDictEqual(t._Table__data, {
             id_1: {"a": 5, "b": 9}
         })
