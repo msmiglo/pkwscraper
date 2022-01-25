@@ -39,7 +39,8 @@ class Sejm2015Scraper(BaseScraper):
         self._download_voivodships()
         self._download_okregi()
         self._download_committees()
-        self._download_candidates()
+        self._download_xls_candidates()
+        self._download_html_candidates()
         self._download_mandates_winners_and_powiaty()
         self._download_gminy_and_obwody()
         self._download_voting_results()
@@ -168,17 +169,20 @@ class Sejm2015Scraper(BaseScraper):
             print(name, end=", ")
         print()
 
-    def _download_candidates(self):
+    def _download_xls_candidates(self):
+        # download xls data
         self.dl.download("/kandydaci.zip")
         with ZipFile(RAW_DATA_DIRECTORY + "/kandydaci.zip") as zf:
             zf.extractall(RAW_DATA_DIRECTORY)
 
+        # open xls
         book = xlrd.open_workbook(
             RAW_DATA_DIRECTORY + "/kandsejm2015-10-19-10-00.xls")
         sheet = book.sheet_by_index(0)
 
-        self.db.create_table("kandydaci")
+        self.db.create_table("kandydaci_xls")
 
+        # iterate over candidates
         for row_index in range(1, sheet.nrows):
             row = sheet.row(row_index)
 
@@ -193,7 +197,7 @@ class Sejm2015Scraper(BaseScraper):
             occupation = row[8].value
             party = row[9].value
 
-            self.db["kandydaci"].put({
+            self.db["kandydaci_xls"].put({
                 "okreg_number": int(okreg_number),
                 "list_number": int(list_number),
                 "committee_name": committee_name,
@@ -203,16 +207,45 @@ class Sejm2015Scraper(BaseScraper):
                 "gender": gender,
                 "residence": residence,
                 "occupation": occupation,
-                "party": party
+                "party": party,
             })
 
         n_candidates = sheet.nrows - 1
-        n_candidates_2 = len(self.db['kandydaci'].find({}))
+        n_candidates_2 = len(self.db['kandydaci_xls'].find({}))
         assert n_candidates == n_candidates_2, \
                f"invalid candidates number: {n_candidates}, {n_candidates_2}"
 
         print()
         print(f"Found {n_candidates} candidates.")
+
+    def _download_html_candidates(self):
+        # enumerate constituencies
+        relative_url_template = "/349_Wyniki_Sejm/0/0/{}.html"
+        okregi = self.db["okręgi"].find({}, fields="number")
+        self.db.create_table("kandydaci_html")
+
+        # iterate over constituencies
+        for okreg_number in okregi:
+            # find candidates from constituency page
+            relative_url = relative_url_template.format(okreg_number)
+            html_content = self.dl.download(relative_url)
+            html_tree = html.fromstring(html_content)
+
+            xpath_candidates = '/html/body//div[@id="tresc"]//' \
+                            'div[@id="wyniki1_tabela_frek"][2]//tbody/tr'
+            candidates_elements = html_tree.xpath(xpath_candidates)
+
+            # save records
+            for row_elem in candidates_elements:
+                cells = row_elem.getchildren()
+                committee_name = cells[1].text_content()
+                full_name = list(cells[3].itertext())[1]
+
+                self.db["kandydaci_html"].put({
+                    "okreg_number": int(okreg_number),
+                    "committee_shortname": committee_name,
+                    "full_name": full_name
+                })
 
     def _download_mandates_winners_and_powiaty(self):
         relative_url_template = "/349_Wyniki_Sejm/0/0/{}.html"

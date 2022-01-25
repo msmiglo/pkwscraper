@@ -36,7 +36,6 @@ class Sejm2015Preprocessing(BasePreprocessing):
         self.target_db = target_db
 
     def run_all(self):
-        print()
         self._preprocess_voivodships()
         self._preprocess_okregi()
         self._preprocess_powiaty()
@@ -502,7 +501,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
     def _preprocess_lists(self):
         self.target_db.create_table("listy")
 
-        lists_data = self.source_db["kandydaci"].find(
+        lists_data = self.source_db["kandydaci_xls"].find(
             query={}, fields=["list_number", "committee_name"])
         lists_dict = {
             self.clean_text(committee_name): list_number
@@ -540,15 +539,39 @@ class Sejm2015Preprocessing(BasePreprocessing):
             })
 
     def _preprocess_candidates(self):
-        # TODO - probably should make a field about invalid
-        #   candidates / committees
-        candidates = self.source_db["kandydaci"].find({})
+        # committees shortnames dict
+        committees_names = self.target_db["listy"].find(
+            {}, fields=["committee_name", "committee_shortname"])
+        committees_names_dict = {
+            shortname: name
+            for name, shortname in committees_names
+        }
+
+        # make list of valid candidates from website
+        valid_candidates = dict()
+        candidates_html_data = self.source_db["kandydaci_html"].find({})
+
+        for c in candidates_html_data.values():
+            constituency_number = int(c["okreg_number"])
+            committee_shortname = self.clean_text(c["committee_shortname"])
+            committee_name = committees_names_dict[committee_shortname]
+            full_name = self.clean_text(c["full_name"])
+
+            candidate_identifier = (
+                constituency_number,
+                committee_name,
+                full_name
+            )
+            valid_candidates[candidate_identifier] = True
+
+        # find all candidates
+        candidates = self.source_db["kandydaci_xls"].find({})
         self.target_db.create_table("kandydaci")
 
         for c in candidates.values():
             # get values
             constituency_number = c["okreg_number"]
-            list_number = c["list_number"]
+            candidate_list_number = c["list_number"]
             committee_name = c["committee_name"]
             position = c["position"]
             surname = c["surname"]
@@ -573,13 +596,13 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 query={"number": constituency_number}, fields="_id")
 
             # get list id
-            list_id, other_list_number = self.target_db["listy"].find_one(
+            list_id, list_number, status = self.target_db["listy"].find_one(
                 query={"committee_name": committee_name},
-                fields=["_id", "list_number"]
+                fields=["_id", "list_number", "committee_status"]
             )
 
             # check data correctness
-            if not other_list_number == list_number:
+            if not list_number == candidate_list_number:
                 print(f"constituency: `{constituency_number}`")
                 raise ValueError(
                     f"non-matching list number for committee"
@@ -589,6 +612,23 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 )
             if gender not in "KM":
                 raise ValueError(f"Wrong gender symbol: `{gender}`")
+            if status not in ["Zarejestrowany", "Rozwiązany"]:
+                raise ValueError(f'Unexpected committee status: "{status}".')
+
+            # get candidate status
+            full_name = " ".join([names, surname])
+            candidate_identifier = (
+                int(constituency_number), committee_name, full_name)
+
+            if candidate_identifier not in valid_candidates:
+                is_crossed_out = True
+                print(f"Crossed out candidate: {candidate_identifier}")
+            elif status != "Zarejestrowany":
+                is_crossed_out = True
+                print(f'Committee status "{status}" for candidate:'
+                      f' {candidate_identifier}')
+            else:
+                is_crossed_out = False
 
             # add record
             self.target_db["kandydaci"].put({
@@ -602,7 +642,10 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 "residence": residence,
                 "occupation": occupation,
                 "party": party,
+                "is_crossed_out": is_crossed_out
             })
+
+        print()
 
     def _preprocess_votes(self):
         # prepare indexes for finding ids

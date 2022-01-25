@@ -17,8 +17,7 @@ listy (lists):
 id, committee_number, committee_type, committee_name, committee_shortname, committee_symbol, committee_status, list_number
 
 kandydaci (candidates):
-# TODO - is_crossed_out
-id, constituency, list, position, surname, names, gender, residence, occupation, party, [year of birth - unavailable]
+id, constituency, list, position, surname, names, gender, residence, occupation, party, is_crossed_out, [year of birth - unavailable]
 
 protoko³y:
 id, obwod, 
