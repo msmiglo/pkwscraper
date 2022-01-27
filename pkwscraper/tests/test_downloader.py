@@ -77,7 +77,7 @@ class TestDownloader(TestCase):
         rel_url_3 = "/"
         expected_filename_2 = "0_wyniki.xls"
         expected_filename_3 = "index.html"
-        
+
         # act
         with self.assertRaises(ValueError):
             Downloader._convert_filename(rel_url_1)

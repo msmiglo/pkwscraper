@@ -36,7 +36,6 @@ class Sejm2015Preprocessing(BasePreprocessing):
         self.target_db = target_db
 
     def run_all(self):
-        print()
         self._preprocess_voivodships()
         self._preprocess_okregi()
         self._preprocess_powiaty()
@@ -502,7 +501,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
     def _preprocess_lists(self):
         self.target_db.create_table("listy")
 
-        lists_data = self.source_db["kandydaci"].find(
+        lists_data = self.source_db["kandydaci_xls"].find(
             query={}, fields=["list_number", "committee_name"])
         lists_dict = {
             self.clean_text(committee_name): list_number
@@ -540,15 +539,42 @@ class Sejm2015Preprocessing(BasePreprocessing):
             })
 
     def _preprocess_candidates(self):
-        # TODO - probably should make a field about invalid
-        #   candidates / committees
-        candidates = self.source_db["kandydaci"].find({})
+        # committees shortnames dict
+        committees_names = self.target_db["listy"].find(
+            {}, fields=["committee_name", "committee_shortname"])
+        committees_names_dict = {
+            shortname: name
+            for name, shortname in committees_names
+        }
+
+        # make list of valid candidates from website
+        valid_candidates = dict()
+        candidates_html_data = self.source_db["kandydaci_html"].find({})
+
+        for c in candidates_html_data.values():
+            constituency_number = int(c["okreg_number"])
+            committee_shortname = self.clean_text(c["committee_shortname"])
+            committee_name = committees_names_dict[committee_shortname]
+            full_name = self.clean_text(c["full_name"])
+
+            if c["crossed_out"]:
+                continue
+
+            candidate_identifier = (
+                constituency_number,
+                committee_name,
+                full_name
+            )
+            valid_candidates[candidate_identifier] = True
+
+        # find all candidates
+        candidates = self.source_db["kandydaci_xls"].find({})
         self.target_db.create_table("kandydaci")
 
         for c in candidates.values():
             # get values
             constituency_number = c["okreg_number"]
-            list_number = c["list_number"]
+            candidate_list_number = c["list_number"]
             committee_name = c["committee_name"]
             position = c["position"]
             surname = c["surname"]
@@ -573,13 +599,14 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 query={"number": constituency_number}, fields="_id")
 
             # get list id
-            list_id, other_list_number = self.target_db["listy"].find_one(
-                query={"committee_name": committee_name},
+            list_id, list_number = self.target_db["listy"].find_one(
+                query={"committee_name": committee_name,
+                       "committee_status": "Zarejestrowany"},
                 fields=["_id", "list_number"]
             )
 
             # check data correctness
-            if not other_list_number == list_number:
+            if not list_number == candidate_list_number:
                 print(f"constituency: `{constituency_number}`")
                 raise ValueError(
                     f"non-matching list number for committee"
@@ -589,6 +616,17 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 )
             if gender not in "KM":
                 raise ValueError(f"Wrong gender symbol: `{gender}`")
+
+            # get candidate status
+            full_name = " ".join([names, surname])
+            candidate_identifier = (
+                int(constituency_number), committee_name, full_name)
+
+            if candidate_identifier not in valid_candidates:
+                is_crossed_out = True
+                print(f"Crossed out candidate: {candidate_identifier}")
+            else:
+                is_crossed_out = False
 
             # add record
             self.target_db["kandydaci"].put({
@@ -602,144 +640,238 @@ class Sejm2015Preprocessing(BasePreprocessing):
                 "residence": residence,
                 "occupation": occupation,
                 "party": party,
+                "is_crossed_out": is_crossed_out
             })
+
+        print()
 
     def _preprocess_votes(self):
-        # prepare indexes for finding ids
-        communes = self.target_db["gminy"].find(
-            query={}, fields=["_id", "code"])
+        # make indexes for finding IDs
+        table_name_template = "wyniki_{}"
+
+        #     commune_code ==> commune_ID
         communes_dict = {
-            code: _id
-            for _id, code in communes
+            commune_code: commune_id
+            for commune_id, commune_code
+            in self.target_db["gminy"].find(
+                {}, fields=["_id", "code"])
         }
 
-        polling_districts = self.target_db["obwody"].find(
-            query={}, fields=["_id", "constituency", "gmina", "number"])
+        #     commune_ID + polling_district_number ==> polling dist. ID
         polling_districts_dict = {
-            (commune_id, district_number): (_id, constituency_id)
-            for _id, constituency_id, commune_id, district_number
-            in polling_districts
+            (commune_id, poll_dist_number): poll_dist_id
+            for poll_dist_id, commune_id, poll_dist_number
+            in self.target_db["obwody"].find(
+                {}, fields=["_id", "gmina", "number"])
         }
 
-        candidates = self.target_db["kandydaci"].find(
-            query={}, fields=["_id", "constituency", "surname", "names"])
-        candidates_dict = {}
-        for _id, constituency_id, surname, names in candidates:
-            key = (constituency_id, surname, names)
-            assert key not in candidates_dict, key
-            candidates_dict[key] = _id
+        #     constituency_no ==> constituency_ID
+        constituency_dict = {
+            constituency_no: constituency_id
+            for constituency_id, constituency_no
+            in self.target_db["okręgi"].find(
+                {}, fields=["_id", "number"])
+        }
 
-        # prepare data
-        votes = self.source_db["wyniki"].find({})
-        self.target_db.create_table("wyniki")
+        #     committee_shortname ==> list_ID
+        list_dict = {
+            committee_shortname: list_id
+            for list_id, committee_shortname
+            in self.target_db["listy"].find(
+                {}, fields=["_id", "committee_shortname"])
+        }
 
-        # iterate over vote results
+        #     committee_longname ==> list_ID
+        list_longname_dict = {
+            committee_longname: list_id
+            for list_id, committee_longname
+            in self.target_db["listy"].find(
+                {}, fields=["_id", "committee_name"])
+        }
+
+        #     constituency_ID + candidate_names
+        #     + candidate_surname + list_ID ==> candidate_ID
+        candidate_dict = {
+            (constituency_id, names, surname, list_id): candidate_id
+            for candidate_id, constituency_id, list_id, surname, names
+            in self.target_db["kandydaci"].find(
+                {}, fields=["_id", "constituency", "list", "surname", "names"])
+        }
+
+        # iterate over constituencies
         errors = []
-        for vote_record in votes.values():
-            # unpack record
-            commune_code = vote_record["commune_code"]
-            polling_district_number = vote_record["polling_district_number"]
-            candidate_full_name = vote_record["candidate_name"]
-            votes = vote_record["votes"]
 
-            # get identifiers
-            commune_id = communes_dict[commune_code]
-            obwod_id, constituency_id = polling_districts_dict[
-                commune_id, polling_district_number]
-            constituency_number = \
-                self.target_db["okręgi"][constituency_id]["number"]
+        constituencies = self.target_db["okręgi"].find({}, fields="number")
+        for constituency_number in constituencies:
+            # read data
+            table_name = table_name_template.format(constituency_number)
+            results_data = self.source_db[table_name].find({})
 
-            candidate_full_name = self.clean_text(candidate_full_name)
-            names, surname = self.parse_full_name(candidate_full_name)
-            candidate_key = constituency_id, surname, names
+            # create new table
+            self.target_db.create_table(table_name)
 
-            # check correctness
-            try:
-                int(votes)
-                votes_ok = True
-            except ValueError:
-                votes_ok = False
+            # iterate over polling districts
+            for district_data in results_data.values():
+                commune_code = district_data["commune_code"]
+                candidates_count = district_data["candidates_count"]
+                polling_district_number = district_data[
+                    "polling_district_number"]
 
-            candidate_ok = candidate_key in candidates_dict
+                # get polling district id
+                commune_id = communes_dict[commune_code]
+                polling_district_id = polling_districts_dict[
+                    (commune_id, polling_district_number)]
 
-            if not candidate_ok and not votes_ok:
-                message = (
-                    f'A1 Problem with candidate: "{candidate_full_name}",'
-                    f' in constituency number {constituency_number},'
-                    f' got votes: {votes} of type: {type(votes)}.'
-                )
-                errors.append(message)
-                continue
+                # make new record
+                record = {
+                    "obwod": polling_district_id,
+                    "candidates_count": candidates_count,
+                }
 
-            if not votes_ok:
-                message_2 = (
-                    f'A2 Problem with votes: "{candidate_full_name}",'
-                    f' in constituency number {constituency_number},'
-                    f' got votes: {votes} of type: {type(votes)}.'
-                )
-                errors.append(message_2)
-                continue
+                # iterate over candidates
+                for candidate, votes in district_data.items():
+                    if candidate in ["commune_code", "polling_district_number",
+                                     "candidates_count"]:
+                        continue
 
-            if not candidate_ok:
-                message_3 = (
-                    f'A3 Candidate not found: "{candidate_full_name}",'
-                    f' in constituency number {constituency_number},'
-                    f' got votes: {votes} of type: {type(votes)}.'
-                )
-                errors.append(message_3)
-                continue
+                    committee_shortname, candidate_full_name = \
+                                         candidate.split("/")
+                    committee_shortname = self.clean_text(committee_shortname)
+                    candidate_full_name = self.clean_text(candidate_full_name)
+                    names, surname = self.parse_full_name(candidate_full_name)
 
-            # get candidate id
-            candidate_id = candidates_dict[candidate_key]
+                    # get candidate id
+                    constituency_id = constituency_dict[constituency_number]
 
-            # add record
-            self.target_db["wyniki"].put({
-                "obwod": obwod_id,
-                "candidate": candidate_id,
-                "votes": votes
-            })
+                    try:
+                        list_id = list_dict[committee_shortname]
+                    except KeyError:
+                        # this is to handle typo in raw data
+                        list_id = list_longname_dict[committee_shortname]
+                        message = (
+                            f'A1 Typo in committee shortname: `{committee_shortname}`.'
+                        )
+                        errors.append(message)
+
+                    try:
+                        candidate_id = candidate_dict[
+                            (constituency_id, names, surname, list_id)]
+                    except KeyError:
+                        # this is because few missing candidates in raw xls
+                        candidate_id = None
+                        message = (
+                            f'A2 Candidate: `{candidate_full_name}` not present in raw data xls file.'
+                        )
+                        errors.append(message)
+
+                    # check correctness
+                    if candidate_id is None:
+                        is_crossed_out = True
+                    else:
+                        is_crossed_out = self.target_db\
+                            ["kandydaci"][candidate_id]["is_crossed_out"]
+
+                    if is_crossed_out:
+                        # assert there are no votes
+                        assert votes == "XXXXX", votes
+                    else:
+                        # add entry to record
+                        votes = int(votes)
+                        record[candidate_id] = votes
+
+                # add record to table
+                self.target_db[table_name].put(record)
+
+            print(f"Preprocessed voting results for constituency {constituency_number}.")
 
         # print errors
+        print()
         errors = list(sorted(set(errors)))
         for e in errors:
             print(e)
-        print()
 
     def _check_votes(self):
-        # get cross product of polling districts and candidates
-        votes = self.target_db["wyniki"].find(
-            {}, fields=["obwod", "candidate"])
-        product_pairs = {
-            (obwod_id, candidate_id): 1
-            for obwod_id, candidate_id in votes
-        }
-
-        # make list of elements
-        candidates = self.target_db["kandydaci"].find(
-            {}, fields=["_id", "constituency"])
-        districts = self.target_db["obwody"].find(
-            {}, fields=["_id", "constituency"])
-
-        # check all elements
-        errors = []
-        for c_id, c_constituency in candidates:
-            for d_id, d_constituency in districts:
-                if c_constituency == d_constituency:
-                    if (d_id, c_id) not in product_pairs:
-                        error_message = (
-                            f'B1 Problem for polling district: {d_id},'
-                            f' candidate: {c_id},'
-                            f' constituency: {c_constituency}.'
-                        )
-                        errors.append(error_message)
-
-        # print errors
-        errors = list(sorted(set(errors)))
-        if len(errors) > 10:
-            print(len(errors))
-        for e in errors[:100]:
-            print(e)
         print()
+        print("Checking voting sums...")
+
+        # sum votes in source DB and target DB
+        source_votes_sum = 0
+        target_votes_sum = 0
+
+        constituencies = self.target_db["okręgi"].find({}, fields="number")
+        for constituency_no in constituencies:
+            table_name = f"wyniki_{constituency_no}"
+            source_results = self.source_db[table_name].find({})
+            target_results = self.target_db[table_name].find({})
+
+            for source_record in source_results.values():
+                for key, value in source_record.items():
+                    if key in ["commune_code", "polling_district_number",
+                               "candidates_count"]:
+                        continue
+                    try:
+                        votes = int(value)
+                        source_votes_sum += votes
+                    except ValueError:
+                        pass
+
+            for target_record in target_results.values():
+                for key, value in target_record.items():
+                    if key in ["commune_code", "polling_district_number",
+                               "candidates_count"]:
+                        continue
+                    try:
+                        votes = int(value)
+                        target_votes_sum += votes
+                    except ValueError:
+                        pass
+
+        if not source_votes_sum == target_votes_sum:
+            raise RuntimeError(
+                f"Incompatible votes sum in source and target DBs:"
+                f" {source_votes_sum} vs {target_votes_sum}.")
+
+        print()
+        print("Checking voting results...")
+        votes_count = 0
+        table_name_template = "wyniki_{}"
+
+        # iterate over constituencies
+        constituencies = self.target_db["okręgi"].find(
+            {}, fields=["_id", "number"])
+
+        for constituency_id, constituency_no in constituencies:
+            # get table with results
+            table_name = table_name_template.format(constituency_no)
+            results_polling_districts_id = self.target_db[table_name].find(
+                {}, fields="obwod")
+
+            # list all polling district in the constituency
+            polling_districts_ids = self.target_db["obwody"].find(
+                {"constituency": constituency_id}, fields="_id")
+
+            # check if all polling districts has been covered
+            if not set() == set():
+                RuntimeError("Not all polling districts has been"
+                             " covered in voting results.")
+
+            # list valid candidates IDs
+            valid_candidates_ids = self.target_db["kandydaci"].find(
+                {"constituency": constituency_id, "is_crossed_out": False},
+                fields="_id"
+            )
+
+            # iterate results
+            for result_data in self.target_db[table_name].find({}).values():
+                if len(result_data) != len(valid_candidates_ids) + 2:
+                    raise RuntimeError("Wrong candidates count in voting results.")
+                for candidate_id in valid_candidates_ids:
+                    votes = result_data[candidate_id]
+                    votes_count += votes
+
+        # print all votes count
+        print()
+        print(f"Found {votes_count} votes in whole elections.")
 
     def _preprocess_mandates(self):
         self.target_db.create_table("mandaty")

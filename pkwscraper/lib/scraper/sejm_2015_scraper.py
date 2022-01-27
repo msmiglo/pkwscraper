@@ -33,13 +33,17 @@ class Sejm2015Scraper(BaseScraper):
                 "Please pass `DbDriver` for writing or `None`.")
         self.db = db
 
+        # for checking
+        self.all_votes = 0
+
     def run_all(self):
         # TODO - check, if the data is already downloaded
         #        and omit unnecessary steps
         self._download_voivodships()
         self._download_okregi()
         self._download_committees()
-        self._download_candidates()
+        self._download_xls_candidates()
+        self._download_html_candidates()
         self._download_mandates_winners_and_powiaty()
         self._download_gminy_and_obwody()
         self._download_voting_results()
@@ -81,6 +85,12 @@ class Sejm2015Scraper(BaseScraper):
         relative_path = "/349_Wyniki_Sejm/0/0.html"
         html_content = self.dl.download(relative_path)
         html_tree = html.fromstring(html_content)
+
+        xpath_all_votes = '/html/body/div/div[4]/div[2]/div[3]' \
+                          '/div[2]/div/div[1]/div/div[3]/div[2]/text()'
+        self.all_votes = int(html_tree.xpath(xpath_all_votes)[0])
+        print()
+        print(f"All votes: {self.all_votes}")
 
         xpath_okregi_mapa = '/html/body//div[@id="wyniki1"]//' \
                             'div[@id="wyniki1_top_mapa"]//svg//a'
@@ -168,17 +178,20 @@ class Sejm2015Scraper(BaseScraper):
             print(name, end=", ")
         print()
 
-    def _download_candidates(self):
+    def _download_xls_candidates(self):
+        # download xls data
         self.dl.download("/kandydaci.zip")
         with ZipFile(RAW_DATA_DIRECTORY + "/kandydaci.zip") as zf:
             zf.extractall(RAW_DATA_DIRECTORY)
 
+        # open xls
         book = xlrd.open_workbook(
             RAW_DATA_DIRECTORY + "/kandsejm2015-10-19-10-00.xls")
         sheet = book.sheet_by_index(0)
 
-        self.db.create_table("kandydaci")
+        self.db.create_table("kandydaci_xls")
 
+        # iterate over candidates
         for row_index in range(1, sheet.nrows):
             row = sheet.row(row_index)
 
@@ -193,7 +206,7 @@ class Sejm2015Scraper(BaseScraper):
             occupation = row[8].value
             party = row[9].value
 
-            self.db["kandydaci"].put({
+            self.db["kandydaci_xls"].put({
                 "okreg_number": int(okreg_number),
                 "list_number": int(list_number),
                 "committee_name": committee_name,
@@ -203,16 +216,57 @@ class Sejm2015Scraper(BaseScraper):
                 "gender": gender,
                 "residence": residence,
                 "occupation": occupation,
-                "party": party
+                "party": party,
             })
 
         n_candidates = sheet.nrows - 1
-        n_candidates_2 = len(self.db['kandydaci'].find({}))
+        n_candidates_2 = len(self.db['kandydaci_xls'].find({}))
         assert n_candidates == n_candidates_2, \
                f"invalid candidates number: {n_candidates}, {n_candidates_2}"
 
         print()
         print(f"Found {n_candidates} candidates.")
+        print()
+
+    def _download_html_candidates(self):
+        # enumerate constituencies
+        relative_url_template = "/349_Wyniki_Sejm/0/0/{}.html"
+        okregi = self.db["okręgi"].find({}, fields="number")
+        self.db.create_table("kandydaci_html")
+
+        # iterate over constituencies
+        for okreg_number in okregi:
+            # find candidates from constituency page
+            relative_url = relative_url_template.format(okreg_number)
+            html_content = self.dl.download(relative_url)
+            html_tree = html.fromstring(html_content)
+
+            xpath_candidates = '/html/body//div[@id="tresc"]//' \
+                            'div[@id="wyniki1_tabela_frek"][2]//tbody/tr'
+            candidates_elements = html_tree.xpath(xpath_candidates)
+
+            # save records
+            for row_elem in candidates_elements:
+                cells = row_elem.getchildren()
+                committee_name = cells[1].text_content()
+                full_name = list(cells[3].itertext())[1]
+                class_name = row_elem.get("class")
+                crossed_out = (
+                    class_name is not None
+                    and "skreslony" in class_name
+                )
+
+                if crossed_out:
+                    print(f"Crossed out candidate: {full_name},"
+                          f" constituency: {okreg_number}, committee:"
+                          f" {committee_name}.")
+
+                self.db["kandydaci_html"].put({
+                    "okreg_number": int(okreg_number),
+                    "committee_shortname": committee_name,
+                    "full_name": full_name,
+                    "crossed_out": crossed_out
+                })
 
     def _download_mandates_winners_and_powiaty(self):
         relative_url_template = "/349_Wyniki_Sejm/0/0/{}.html"
@@ -327,12 +381,13 @@ class Sejm2015Scraper(BaseScraper):
                 RAW_DATA_DIRECTORY + "wyniki_zb_2015-gl-lis-obw.zip") as zf:
             zf.extractall(RAW_DATA_DIRECTORY)
 
+        all_votes = 0
         book = xlrd.open_workbook(
             RAW_DATA_DIRECTORY + "/2015-gl-lis-obw.xls")
         sheet = book.sheet_by_index(0)
-
         for row_index in range(1, sheet.nrows):
             row = sheet.row(row_index)
+            all_votes += int(row[27].value)
 
             self.db["obwody"].put({
                 "constituency_number":          int(row[0].value),
@@ -365,6 +420,10 @@ class Sejm2015Scraper(BaseScraper):
                 "votes_valid":                  int(row[27].value)
             })
 
+        if not all_votes == self.all_votes:
+            raise RuntimeError(
+                "Incompatible votes sum: {all_votes} vs {self.all_votes}.")
+
         print()
         n_gminy = len(self.db["gminy"].find({}))
         print(f"Found {n_gminy} communes.")
@@ -373,14 +432,22 @@ class Sejm2015Scraper(BaseScraper):
         print(f"Found {n_obwody} voting constituencies.")
 
     def _download_voting_results(self):
-        # votes from 41 xlsx files
+        """ Read votes from 41 xlsx files """
         print()
+        # create extension of polling districts data
         self.db.create_table("obwody_uzupełnienie")
-        self.db.create_table("wyniki")
+        all_votes = 0
 
+        # iterate over constituencies
+        table_name_template = "wyniki_{}"
         constituencies = self.db["okręgi"].find({}, fields="number")
         for constituency_number in constituencies:
+            # create table with results for a constituency
             constituency_number = int(constituency_number)
+            table_name = table_name_template.format(constituency_number)
+            self.db.create_table(table_name)
+
+            # read data
             relative_url = f"/wyniki_okr_sejm/{constituency_number:02d}.xlsx"
             self.dl.download(relative_url)
             filename = relative_url.replace("/", "_").strip("_")
@@ -389,8 +456,8 @@ class Sejm2015Scraper(BaseScraper):
             sheet = book.active
 
             # read the first row with lists and candidates names
-            last_protocole_column_value = sheet.cell(1, 27).value
-            assert last_protocole_column_value == "Sejm - Liczba głosów ważnych oddanych łącznie na wszystkie listy kandydatów", \
+            last_cell_of_protocole_columns = sheet.cell(1, 27).value
+            assert last_cell_of_protocole_columns == "Sejm - Liczba głosów ważnych oddanych łącznie na wszystkie listy kandydatów", \
                 f"wrong columns alignment: {last_protocole_column_value}"
             current_list = None
             candidates = []
@@ -417,19 +484,21 @@ class Sejm2015Scraper(BaseScraper):
 
             # iterate over polling districts (1 row - 1 polling district)
             print(f"Iterating over polling districts in constituency no. {constituency_number}...")
-            #for row_index in range(1, sheet.max_row):
             for row_index, row in enumerate(sheet.iter_rows()):
+                polling_district_votes = 0
                 if row_index == 0:
                     continue
                 if row_index % 100 == 0:
                     print(f"{row_index} of {sheet.max_row-1}",
                           end=", ", flush=True)
+
                 # get additional polling district data
                 commune_name = row[1].value
                 commune_code = row[2].value
                 commune_code = re.findall('\d+', commune_code)[0]
                 commission_name = row[3].value
                 polling_district_number = row[4].value
+
                 # put it into table
                 self.db["obwody_uzupełnienie"].put({
                     "commune_name": commune_name,
@@ -446,21 +515,42 @@ class Sejm2015Scraper(BaseScraper):
                         f"{len(candidates)}/{len(candidates_cell_range)}"
                     )
 
+                # prepare polling district entry
+                record = {
+                    "commune_code": commune_code,
+                    "polling_district_number": polling_district_number,
+                    "candidates_count": 0,
+                }
+
                 # iterate over candidates in the given polling district
-                #for col_index, col in row.iter_cells(27):
                 for candidate, column_index in zip(
                         candidates, candidates_cell_range):
                     committee_name, candidate_name = candidate
                     votes = row[column_index].value
-                    # put data in table
-                    if candidate_name != "sum":
-                        self.db["wyniki"].put({
-                            "commune_code": commune_code,
-                            "polling_district_number": polling_district_number,
-                            "candidate_name": candidate_name,
-                            "votes": votes
-                        })
+                    if candidate_name == "sum":
+                        continue
+
+                    try:
+                        all_votes += int(votes)
+                    except ValueError:
+                        if votes != "XXXXX":
+                            raise
+
+                    # add field to the record
+                    assert "/" not in committee_name + candidate_name, \
+                           "`{committee_name + candidate_name}` has slash"
+                    candidate_identifier = f"{committee_name}/{candidate_name}"
+                    record[candidate_identifier] = votes
+                    record["candidates_count"] += 1
+
+                # add record to table
+                self.db[table_name].put(record)
 
             print()
             print(f"Finished constituency no. {constituency_number}.")
         print()
+
+        if not all_votes == self.all_votes:
+            print(f"Incompatible votes sum: {all_votes} vs {self.all_votes}."
+                  f" This comes from miscounting few crossed out candidates.")
+            print()

@@ -17,8 +17,7 @@ listy (lists):
 id, committee_number, committee_type, committee_name, committee_shortname, committee_symbol, committee_status, list_number
 
 kandydaci (candidates):
-# TODO - is_crossed_out
-id, constituency, list, position, surname, names, gender, residence, occupation, party, [year of birth - unavailable]
+id, constituency, list, position, surname, names, gender, residence, occupation, party, is_crossed_out, [year of birth - unavailable]
 
 protoko³y:
 id, obwod, 
@@ -47,8 +46,9 @@ invalid_candidate		(w tym: z powodu postawienia znaku „x” wy³¹cznie obok nazwisk
 votes_valid			(G³osy wa¿ne)
 
 
-wyniki g³osowania (voting results):
-id, obwod, candidate, votes
+wyniki g³osowania [i] (voting results):
+# NOTE: separate file for each constituency
+id, obwod, candidates_count, candidate_1_votes, candidate_2_votes, ..., candidate_n_votes
 
 mandaty (mandates):
 id, candidate
