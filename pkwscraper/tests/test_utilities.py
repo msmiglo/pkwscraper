@@ -3,6 +3,9 @@ from decimal import Decimal
 from unittest import main, skip, TestCase
 from unittest.mock import call, MagicMock, patch
 
+from matplotlib.collections import PatchCollection
+from matplotlib.patches import PathPatch
+
 from pkwscraper.lib.utilities import get_parent_code, Region
 
 
@@ -103,6 +106,8 @@ class TestRegion(TestCase):
     - test load from svg
     - test save to json
     - test load from json
+    - test to mpl path
+    - test to mpl collection
     - test filling_boundaries_line
     - test contour_lines
     - test is empty
@@ -232,6 +237,40 @@ class TestRegion(TestCase):
     def test_load_from_json(self):
         region = Region.from_json(self.json_txt)
         self.assertEqual(region.data, self.region_data)
+
+    def test_to_mpl_path(self):
+        """ This is only creation test. """
+        region = Region(self.region_data)
+        mpl_path = region.to_mpl_path(color=(0.5, 0.6, 0.7))
+        self.assertIsInstance(mpl_path, PathPatch)
+
+    def test_to_mpl_collection(self):
+        """ Tests two methods, integration. """
+        # arrange
+        region = Region(self.region_data)
+        region_2 = Region(self.region_data)
+        region_3 = Region(self.empty_region_data)
+        color = (0.5, 0.6, 0.7)
+        color_2 = (0.2, 0.3, 0.4)
+        color_3 = (0.7, 0.8, 0.9)
+        alpha = 0.82
+        # act
+        with self.assertRaises(ValueError) as e:
+            mpl_collection = Region.to_mpl_collection(
+                regions=[region, region_2],
+                colors=[color, color_2, color_3],
+                alpha=alpha
+            )
+        mpl_collection = Region.to_mpl_collection(
+            regions=[region, region_2, region_3],
+            colors=[color, color_2, color_3],
+            alpha=alpha
+        )
+        # assert
+        self.assertEqual(e.exception.args[0],
+                         "`paths` and `colors` must be of same lenght.")
+        self.assertEqual(len(mpl_collection.get_paths()), 2)
+        self.assertIsInstance(mpl_collection, PatchCollection)
 
     def test_filling_boundaries_line(self):
         region = Region(self.region_data)

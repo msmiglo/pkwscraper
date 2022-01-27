@@ -2,6 +2,9 @@
 from decimal import Decimal
 import json
 
+from matplotlib.collections import PatchCollection
+from matplotlib.patches import PathPatch
+from matplotlib.path import Path
 import svg.path
 from svg.path import parse_path
 
@@ -188,6 +191,7 @@ class Region:
         return cls(data)
 
     def json(self):
+        # TODO - RENAME TO `to_json`
         """ Serialize to JSON. """
         data = [[[[float(coord)
                    for coord in point]
@@ -196,6 +200,31 @@ class Region:
                 for shape in self.data]
 
         return json.dumps(data, separators=(',', ':'))
+
+    def to_mpl_path(self, color):
+        # make path object
+        vertices = []
+        codes = []
+        for line in self.data[0]:
+            vertices += list(line) + [line[0]]
+            n = len(line)
+            codes += [Path.MOVETO] + n * [Path.LINETO]
+        path = Path(vertices, codes)
+        # make patch
+        patch = PathPatch(path, color=color)
+        patch.set_fill(True)
+        return patch
+
+    @staticmethod
+    def to_mpl_collection(regions, colors, alpha=1.0):
+        if len(regions) != len(colors):
+            raise ValueError("`paths` and `colors` must be of same lenght.")
+        patches = [region.to_mpl_path(color)
+                   for region, color in zip(regions, colors)
+                   if not region.is_empty()]
+        collection = PatchCollection(
+            patches, match_original=True, alpha=alpha)
+        return collection
 
     @property
     def filling_boundaries_line(self):
