@@ -99,11 +99,13 @@ class TestRegion(TestCase):
     - test round decimal
     - test get line start
     - test init
+    - test load from empty svg
     - test load from svg
     - test save to json
     - test load from json
     - test filling_boundaries_line
     - test contour_lines
+    - test is empty
     - test xy range
     """
     def setUp(self):
@@ -134,6 +136,7 @@ class TestRegion(TestCase):
                               for point in curve]
                              for curve in shape]
                             for shape in region_data]
+        self.empty_region_data = [[]]
         self.json_txt = ("[[[[9.2,3.0],[11.2,3.0],[13.2,5.0],[13.2,7.0],"
             "[11.2,9.0],[9.2,9.0],[7.2,7.0],[7.2,5.0]],[[12.0,5.4],"
             "[13.0,5.4],[14.0,6.4],[14.0,7.4],[13.0,8.4],[12.0,8.4],"
@@ -200,6 +203,14 @@ class TestRegion(TestCase):
         region = Region(self.region_data)
         self.assertListEqual(region.data, self.region_data)
 
+    def test_load_from_empty_svg(self):
+        with self.assertRaises(TypeError):
+            reg_1 = Region.from_svg_d(None)
+        reg_2 = Region.from_svg_d("   ")
+        self.assertListEqual(reg_2.data, [[]])
+        reg_3 = Region.from_svg_d("")
+        self.assertListEqual(reg_3.data, [[]])
+
     def test_load_from_svg(self):
         reg = Region.from_svg_d(self.geo_txt)
         self.assertEqual(len(reg.data), len(self.region_data))
@@ -231,6 +242,12 @@ class TestRegion(TestCase):
         region = Region(self.region_data)
         lines = region.contour_lines
         self.assertEqual(len(lines), 4)
+
+    def test_is_empty(self):
+        region_1 = Region(self.region_data)
+        self.assertFalse(region_1.is_empty())
+        region_2 = Region(self.empty_region_data)
+        self.assertTrue(region_2.is_empty())
 
     def test_xy_range(self):
         region = Region(self.region_data)

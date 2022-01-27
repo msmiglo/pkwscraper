@@ -227,6 +227,12 @@ class Region:
                 lines.append(new_curve)
         return lines
 
+    def is_empty(self):
+        if len(self.data) == 1 and len(self.data[0]) == 0:
+            return True
+        else:
+            return False
+
     def get_xy_range(self):
         xs = [point[0] for shape in self.data
               for curve in shape for point in curve]

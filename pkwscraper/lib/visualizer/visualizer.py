@@ -248,5 +248,5 @@ class Visualizer:
 
 if __name__ == "__main__":
     vis = Visualizer()
-    #vis.visualize()
+    vis.visualize()
     vis.visualize_2()
