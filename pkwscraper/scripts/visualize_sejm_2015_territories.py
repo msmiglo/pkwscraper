@@ -22,7 +22,7 @@ RESCRIBED_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/rescribed/"
 PREPROCESSED_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/preprocessed/"
 
 
-class Visualizer:
+class TerritoryVisualizer:
     def __init__(self, db=None):
         if db is None:
             db = DbDriver(PREPROCESSED_DATA_DIRECTORY, read_only=True)
@@ -215,6 +215,6 @@ class Visualizer:
 
 
 if __name__ == "__main__":
-    vis = Visualizer()
-    vis.visualize()
-    vis.visualize_2()
+    ter_vis = TerritoryVisualizer()
+    ter_vis.visualize()
+    ter_vis.visualize_2()
