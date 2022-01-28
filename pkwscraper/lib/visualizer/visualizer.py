@@ -33,44 +33,85 @@ class Visualizer:
                 "Please pass `DbDriver` for read only or `None`.")
         self.db = db
 
+    def visualize(self):
+        # choose units to visualize
+        tables = ["gminy", "powiaty", "województwa", "okręgi"]
+        regions = []
+        for table_name in tables:
+            geos = self.db[table_name].find({}, fields="geo")
+            regions += [Region.from_json(geo) for geo in geos]
+
+        # prepare path patches
+        n = len(regions)
+
+        kwargs_list = [
+            {"color": [random.random() for _ in range(3)] + [0]}
+            for i in range(n)
+        ]
+
+        path_collection = Region.to_mpl_collection(
+            regions=regions, kwargs_list=kwargs_list, alpha=0.4)
+
+        # get plot range
+        ranges = [region.get_xy_range()
+                  for region in regions
+                  if not region.is_empty()]
+
+        x_min = min(r["x_min"] for r in ranges)
+        x_max = max(r["x_max"] for r in ranges)
+        y_min = min(r["y_min"] for r in ranges)
+        y_max = max(r["y_max"] for r in ranges)
+
+
+        # make plot
+        fig, ax = plt.subplots()
+        ax.axis('equal')
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.invert_yaxis()
+
+        ax.add_collection(path_collection)
+
+        plt.show()
+        plt.close()
+
     def get_invalid(self):
-        gminy_geos = self.db["gminy"].find({}, fields=["_id", "geo"])
+        # read communes data from DB
+        gminy_data = self.db["gminy"].find({}, fields=["_id", "geo"])
         gminy = {
             gmina_id: {
-                "_id": gmina_id,
-                "geo": Region.from_json(geo).data[0],
+                "region": Region.from_json(geo),
                 "voters": 0,
                 "ballots_valid": 0,
                 "votes_invalid": 0,
                 "invalid_2_candidates": 0,
                 "votes_valid": 0,
             }
-            for gmina_id, geo in gminy_geos
+            for gmina_id, geo in gminy_data
         }
 
-        obwod_to_gmina_id = {
-            obwod_id: gmina_id
-            for obwod_id, gmina_id
-            in self.db["obwody"].find(
-                query={}, fields=["_id", "gmina"])
-        }
-
+        # read protocoles data from polling districts from DB
         protocoles = self.db["protokoły"].find(
             query={},
             fields=["obwod", "voters", "ballots_valid",
                     "votes_invalid", "invalid_2_candidates", "votes_valid"]
         )
 
+        # iterate over protocoles
         for protocole_record in protocoles:
+            # unzip data
             obwod_id = protocole_record[0]
             voters = protocole_record[1]
             ballots_valid = protocole_record[2]
             votes_invalid = protocole_record[3]
             invalid_2_candidates = protocole_record[4]
             votes_valid = protocole_record[5]
-            gmina_id = obwod_to_gmina_id[obwod_id]
 
+            # get commune entry
+            gmina_id = self.db["obwody"][obwod_id]["gmina"]
             gmina = gminy[gmina_id]
+
+            # add votes for commune entry
             gmina["voters"] += voters
             gmina["ballots_valid"] += ballots_valid
             gmina["votes_invalid"] += votes_invalid
@@ -81,51 +122,27 @@ class Visualizer:
 
     def visualize_2(self):
         # get constituencies
-        okregi_geo = [okreg["geo"] for _id, okreg
-                      in self.db["okręgi"].find({}).items()]
-        okregi_regions = [Region.from_json(geo) for geo in okregi_geo]
+        okregi_regions = [
+            Region.from_json(geo)
+            for geo
+            in self.db["okręgi"].find(
+                query={}, fields="geo")
+        ]
 
-        # prepare plot
-        x_min = min(reg.get_xy_range()["x_min"] for reg in okregi_regions)
-        x_max = max(reg.get_xy_range()["x_max"] for reg in okregi_regions)
-        y_min = min(reg.get_xy_range()["y_min"] for reg in okregi_regions)
-        y_max = max(reg.get_xy_range()["y_max"] for reg in okregi_regions)
-
-        okregi_data = [region.data[0] for region in okregi_regions]
-
-        fig, ax = plt.subplots()
-        ax.axis('equal')
-        ax.set_xlim(x_min, x_max)
-        ax.set_ylim(y_min, y_max)
-        ax.invert_yaxis()
-
-        patches = []
-
-        # draw constituencies
-        for okreg_data in okregi_data:
-            if len(okreg_data) == 0:
-                continue
-
-            # make path object
-            vertices = []
-            codes = []
-            for line in okreg_data:
-                vertices += list(line) + [line[0]]
-                n = len(line)
-                codes += [Path.MOVETO] + n * [Path.LINETO]
-            path = Path(vertices, codes)
-            # make patch
-            patch = PathPatch(path, facecolor=(0, 0, 0, 0), edgecolor="k")
-            patch.set_fill(False)
-            patches.append(patch)
+        okregi_kwargs = len(okregi_regions) * [
+            {"facecolor": (0, 0, 0, 0), "edgecolor": "k"}]
 
         # preprocess gminy
+        gminy_data = self.get_invalid()
+        gminy = [
+            gmina
+            for gmina in gminy_data.values()
+            if not gmina["region"].is_empty()
+        ]
+        gminy_regions = [gmina["region"] for gmina in gminy]
         gminy_measures = []
 
-        for gmina in self.get_invalid().values():
-            if len(gmina["geo"]) == 0:
-                continue
-
+        for gmina in gminy:
             # calculate measures
             voters = gmina["voters"]
             ballots_valid = gmina["ballots_valid"]
@@ -138,21 +155,26 @@ class Visualizer:
             too_many_absolute = invalid_2_candidates / ballots_valid
 
             # add element
-            gminy_measures.append(
-                [gmina["geo"], invalid_percent,
-                 too_many_candidates_percent, too_many_absolute])
+            gminy_measures.append([
+                invalid_percent,
+                too_many_candidates_percent,
+                too_many_absolute
+            ])
 
         # take max values for scaling
-        max_invalid = max(gmina[1] for gmina in gminy_measures)
-        max_too_many = max(gmina[2] for gmina in gminy_measures)
-        max_too_many_abs = max(gmina[3] for gmina in gminy_measures)
+        max_invalid = max(gmina[0] for gmina in gminy_measures)
+        max_too_many = max(gmina[1] for gmina in gminy_measures)
+        max_too_many_abs = max(gmina[2] for gmina in gminy_measures)
         print(f"max invalid votes percentage: {max_invalid}")
         print(f"max too many candidates percentage: {max_too_many}")
         print(f"max too many candidates absolute: {max_too_many_abs}")
 
-        # draw gminy
-        for geo, invalid_percent, too_many_candidates_percent, \
+        # prepare gminy visualization
+        gminy_kwargs = []
+
+        for invalid_percent, too_many_candidates_percent, \
                 too_many_absolute in gminy_measures:
+
             # scale values
             invalid_percent /= max_invalid
             too_many_candidates_percent /= max_too_many
@@ -164,83 +186,29 @@ class Visualizer:
             blue = min(1, max(0, invalid_percent - red))
 
             color = [red, green, blue]
+            gminy_kwargs.append({"color": color})
 
-            # make path object
-            vertices = []
-            codes = []
-            for line in geo:
-                vertices += list(line) + [line[0]]
-                n = len(line)
-                codes += [Path.MOVETO] + n * [Path.LINETO]
-            path = Path(vertices, codes)
-            # make patch
-            patch = PathPatch(path, color=color)
-            patch.set_fill(True)
-            patches.append(patch)
+        # concatenate data
+        regions = okregi_regions + gminy_regions
+        kwargs_list = okregi_kwargs + gminy_kwargs
+
+        # prepare plot
+        x_min = min(reg.get_xy_range()["x_min"] for reg in okregi_regions)
+        x_max = max(reg.get_xy_range()["x_max"] for reg in okregi_regions)
+        y_min = min(reg.get_xy_range()["y_min"] for reg in okregi_regions)
+        y_max = max(reg.get_xy_range()["y_max"] for reg in okregi_regions)
 
         # make plot
-        p = PatchCollection(patches, match_original=True, alpha=0.82)
-        ax.add_collection(p)
-
-        plt.show()
-        plt.close()
-
-    def visualize(self):
-        gminy_geo = [gmina["geo"] for _id, gmina
-                     in self.db["gminy"].find({}).items()]
-        gminy_geo = [Region.from_json(geo).data[0] for geo in gminy_geo]
-
-        powiaty_geo = [powiat["geo"] for _id, powiat
-                     in self.db["powiaty"].find({}).items()]
-        powiaty_geo = [Region.from_json(geo).data[0] for geo in powiaty_geo]
-
-        voivod_geo = [voivod["geo"] for _id, voivod
-                      in self.db["województwa"].find({}).items()]
-        voivod_geo = [Region.from_json(geo).data[0] for geo in voivod_geo]
-
-        okregi_geo = [okreg["geo"] for _id, okreg
-                      in self.db["okręgi"].find({}).items()]
-        okregi_geo = [Region.from_json(geo).data[0] for geo in okregi_geo]
-
-        x_min = min(p[0] for voivod in voivod_geo for line in voivod for p in line)
-        x_max = max(p[0] for voivod in voivod_geo for line in voivod for p in line)
-        y_min = min(p[1] for voivod in voivod_geo for line in voivod for p in line)
-        y_max = max(p[1] for voivod in voivod_geo for line in voivod for p in line)
-
         fig, ax = plt.subplots()
         ax.axis('equal')
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
         ax.invert_yaxis()
 
-        patches = []
+        path_collection = Region.to_mpl_collection(
+            regions=regions, kwargs_list=kwargs_list, alpha=0.82)
 
-        for level in [gminy_geo, powiaty_geo, voivod_geo, okregi_geo]:
-            for unit in level:
-                if len(unit) == 0:
-                    continue
-                #color = random.sample("bcgryk", k=1)[0]
-                color = [random.random() for _ in range(3)] + [0]
-                print(len(unit), end=" ")
-
-                # make path object
-                vertices = []
-                codes = []
-                for line in unit:
-                    vertices += list(line) + [line[0]]
-                    n = len(line)
-                    codes += [Path.MOVETO] + n * [Path.LINETO]
-                path = Path(vertices, codes)
-                # make patch
-                patch = PathPatch(path, color=color)
-                patch.set_fill(True)
-                patches.append(patch)
-
-            print()
-            print()
-
-        p = PatchCollection(patches, match_original=True, alpha=0.4)
-        ax.add_collection(p)
+        ax.add_collection(path_collection)
 
         plt.show()
         plt.close()

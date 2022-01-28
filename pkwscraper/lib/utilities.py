@@ -201,7 +201,7 @@ class Region:
 
         return json.dumps(data, separators=(',', ':'))
 
-    def to_mpl_path(self, color):
+    def to_mpl_path(self, **kwargs):
         # make path object
         vertices = []
         codes = []
@@ -211,19 +211,20 @@ class Region:
             codes += [Path.MOVETO] + n * [Path.LINETO]
         path = Path(vertices, codes)
         # make patch
-        patch = PathPatch(path, color=color)
+        patch = PathPatch(path, **kwargs)
         patch.set_fill(True)
         return patch
 
     @staticmethod
-    def to_mpl_collection(regions, colors, alpha=1.0):
-        if len(regions) != len(colors):
-            raise ValueError("`paths` and `colors` must be of same lenght.")
-        patches = [region.to_mpl_path(color)
-                   for region, color in zip(regions, colors)
+    def to_mpl_collection(regions, kwargs_list, **collection_kwargs):
+        if len(regions) != len(kwargs_list):
+            raise ValueError(
+                "`regions` and `kwargs_list` must be of same length.")
+        patches = [region.to_mpl_path(**kwargs_i)
+                   for region, kwargs_i in zip(regions, kwargs_list)
                    if not region.is_empty()]
         collection = PatchCollection(
-            patches, match_original=True, alpha=alpha)
+            patches, match_original=True, **collection_kwargs)
         return collection
 
     @property

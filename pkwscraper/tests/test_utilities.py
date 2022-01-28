@@ -253,22 +253,24 @@ class TestRegion(TestCase):
         color = (0.5, 0.6, 0.7)
         color_2 = (0.2, 0.3, 0.4)
         color_3 = (0.7, 0.8, 0.9)
+        kwargs_list = [{"color": color_i}
+                       for color_i in [color, color_2, color_3]]
         alpha = 0.82
         # act
         with self.assertRaises(ValueError) as e:
             mpl_collection = Region.to_mpl_collection(
                 regions=[region, region_2],
-                colors=[color, color_2, color_3],
+                kwargs_list=kwargs_list,
                 alpha=alpha
             )
         mpl_collection = Region.to_mpl_collection(
             regions=[region, region_2, region_3],
-            colors=[color, color_2, color_3],
+            kwargs_list=kwargs_list,
             alpha=alpha
         )
         # assert
         self.assertEqual(e.exception.args[0],
-                         "`paths` and `colors` must be of same lenght.")
+                         "`regions` and `kwargs_list` must be of same length.")
         self.assertEqual(len(mpl_collection.get_paths()), 2)
         self.assertIsInstance(mpl_collection, PatchCollection)
 
