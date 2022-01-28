@@ -202,6 +202,12 @@ class Region:
         return json.dumps(data, separators=(',', ':'))
 
     def to_mpl_path(self, **kwargs):
+        """
+        Make an `PathPatch` object that can be added to matplotlib
+        plot.
+
+        `kwargs` are passed to PathPatch constructor.
+        """
         # make path object
         vertices = []
         codes = []
@@ -217,6 +223,21 @@ class Region:
 
     @staticmethod
     def to_mpl_collection(regions, kwargs_list, **collection_kwargs):
+        """
+        Create `PatchCollection` object that can be added to
+        matplotlib plot and rendered. It takes `Region` objects
+        and list of keyword arguments to be passed to creation
+        of each PathPatch.
+
+        `regions` - list of Region
+        `kwargs_list` - a list of kwargs that will be passed to
+            method `to_mpl_path` called for each Region from
+            `regions` list. Both lists must be of the same length.
+        `collection_kwargs` - kwargs passed to the constructor of
+            `PatchCollection` object along with list of patches.
+
+        NOTE: empty regions are omitted from creating patches.
+        """
         if len(regions) != len(kwargs_list):
             raise ValueError(
                 "`regions` and `kwargs_list` must be of same length.")
@@ -258,12 +279,21 @@ class Region:
         return lines
 
     def is_empty(self):
+        """
+        Check if Region is empty (has no geometric entities defined).
+        """
         if len(self.data) == 1 and len(self.data[0]) == 0:
             return True
         else:
             return False
 
     def get_xy_range(self):
+        """
+        Get the data of maximum and minimum span of x- and
+        y-coordinates. It returns dictionary with different
+        arrangements of x_min, x_max, y_min and y_max for
+        convenience.
+        """
         xs = [point[0] for shape in self.data
               for curve in shape for point in curve]
         ys = [point[1] for shape in self.data
