@@ -231,7 +231,7 @@ class TestRegion(TestCase):
 
     def test_save_to_json(self):
         region = Region(self.region_data)
-        json_txt = region.json()
+        json_txt = region.to_json()
         self.assertEqual(json_txt, self.json_txt)
 
     def test_load_from_json(self):

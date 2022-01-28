@@ -190,8 +190,7 @@ class Region:
 
         return cls(data)
 
-    def json(self):
-        # TODO - RENAME TO `to_json`
+    def to_json(self):
         """ Serialize to JSON. """
         data = [[[[float(coord)
                    for coord in point]
