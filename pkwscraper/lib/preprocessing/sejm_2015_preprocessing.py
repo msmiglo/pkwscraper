@@ -213,7 +213,7 @@ class Sejm2015Preprocessing(BasePreprocessing):
     @staticmethod
     def _parse_geo(geo_txt):
         region = Region.from_svg_d(geo_txt)
-        jsoned_txt = region.json()
+        jsoned_txt = region.to_json()
         return jsoned_txt
 
     def _preprocess_voivodships(self):

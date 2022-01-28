@@ -3,6 +3,9 @@ from decimal import Decimal
 from unittest import main, skip, TestCase
 from unittest.mock import call, MagicMock, patch
 
+from matplotlib.collections import PatchCollection
+from matplotlib.patches import PathPatch
+
 from pkwscraper.lib.utilities import get_parent_code, Region
 
 
@@ -99,11 +102,15 @@ class TestRegion(TestCase):
     - test round decimal
     - test get line start
     - test init
+    - test load from empty svg
     - test load from svg
     - test save to json
     - test load from json
+    - test to mpl path
+    - test to mpl collection
     - test filling_boundaries_line
     - test contour_lines
+    - test is empty
     - test xy range
     """
     def setUp(self):
@@ -134,6 +141,7 @@ class TestRegion(TestCase):
                               for point in curve]
                              for curve in shape]
                             for shape in region_data]
+        self.empty_region_data = [[]]
         self.json_txt = ("[[[[9.2,3.0],[11.2,3.0],[13.2,5.0],[13.2,7.0],"
             "[11.2,9.0],[9.2,9.0],[7.2,7.0],[7.2,5.0]],[[12.0,5.4],"
             "[13.0,5.4],[14.0,6.4],[14.0,7.4],[13.0,8.4],[12.0,8.4],"
@@ -200,6 +208,14 @@ class TestRegion(TestCase):
         region = Region(self.region_data)
         self.assertListEqual(region.data, self.region_data)
 
+    def test_load_from_empty_svg(self):
+        with self.assertRaises(TypeError):
+            reg_1 = Region.from_svg_d(None)
+        reg_2 = Region.from_svg_d("   ")
+        self.assertListEqual(reg_2.data, [[]])
+        reg_3 = Region.from_svg_d("")
+        self.assertListEqual(reg_3.data, [[]])
+
     def test_load_from_svg(self):
         reg = Region.from_svg_d(self.geo_txt)
         self.assertEqual(len(reg.data), len(self.region_data))
@@ -215,12 +231,48 @@ class TestRegion(TestCase):
 
     def test_save_to_json(self):
         region = Region(self.region_data)
-        json_txt = region.json()
+        json_txt = region.to_json()
         self.assertEqual(json_txt, self.json_txt)
 
     def test_load_from_json(self):
         region = Region.from_json(self.json_txt)
         self.assertEqual(region.data, self.region_data)
+
+    def test_to_mpl_path(self):
+        """ This is only creation test. """
+        region = Region(self.region_data)
+        mpl_path = region.to_mpl_path(color=(0.5, 0.6, 0.7))
+        self.assertIsInstance(mpl_path, PathPatch)
+
+    def test_to_mpl_collection(self):
+        """ Tests two methods, integration. """
+        # arrange
+        region = Region(self.region_data)
+        region_2 = Region(self.region_data)
+        region_3 = Region(self.empty_region_data)
+        color = (0.5, 0.6, 0.7)
+        color_2 = (0.2, 0.3, 0.4)
+        color_3 = (0.7, 0.8, 0.9)
+        kwargs_list = [{"color": color_i}
+                       for color_i in [color, color_2, color_3]]
+        alpha = 0.82
+        # act
+        with self.assertRaises(ValueError) as e:
+            mpl_collection = Region.to_mpl_collection(
+                regions=[region, region_2],
+                kwargs_list=kwargs_list,
+                alpha=alpha
+            )
+        mpl_collection = Region.to_mpl_collection(
+            regions=[region, region_2, region_3],
+            kwargs_list=kwargs_list,
+            alpha=alpha
+        )
+        # assert
+        self.assertEqual(e.exception.args[0],
+                         "`regions` and `kwargs_list` must be of same length.")
+        self.assertEqual(len(mpl_collection.get_paths()), 2)
+        self.assertIsInstance(mpl_collection, PatchCollection)
 
     def test_filling_boundaries_line(self):
         region = Region(self.region_data)
@@ -231,6 +283,12 @@ class TestRegion(TestCase):
         region = Region(self.region_data)
         lines = region.contour_lines
         self.assertEqual(len(lines), 4)
+
+    def test_is_empty(self):
+        region_1 = Region(self.region_data)
+        self.assertFalse(region_1.is_empty())
+        region_2 = Region(self.empty_region_data)
+        self.assertTrue(region_2.is_empty())
 
     def test_xy_range(self):
         region = Region(self.region_data)
