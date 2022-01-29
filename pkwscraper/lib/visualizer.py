@@ -108,22 +108,25 @@ class Visualizer:
     def prepare(self):
         """ Put all data and format the plot, before rendering. """
         # get ranges
-        x_min = min(reg.get_xy_range()["x_min"] for reg in self.regions)
-        x_max = max(reg.get_xy_range()["x_max"] for reg in self.regions)
-        y_min = min(reg.get_xy_range()["y_min"] for reg in self.regions)
-        y_max = max(reg.get_xy_range()["y_max"] for reg in self.regions)
+        ranges = [region.get_xy_range() for region in self.regions
+                  if not region.is_empty()]
+        x_min = min(r["x_min"] for r in ranges)
+        x_max = max(r["x_max"] for r in ranges)
+        y_min = min(r["y_min"] for r in ranges)
+        y_max = max(r["y_max"] for r in ranges)
 
         # get patch collection of units
         kwargs_list = [{"color": color} for color in self.colors]
         path_collection = Region.to_mpl_collection(
-            regions=self.regions, kwargs_list=kwargs_list, alpha=0.82)
+            regions=self.regions, kwargs_list=kwargs_list, antialiased=True)
 
         # get patch collection of background units contours
         if self.background:
             background_kwargs = len(self.background) * [
                 {"facecolor": None, "fill": False, "edgecolor": "k"}]
             background_collection = Region.to_mpl_collection(
-                regions=self.background, kwargs_list=background_kwargs)
+                regions=self.background, kwargs_list=background_kwargs,
+                antialiased=True)
 
         # make plot
         fig, ax = plt.subplots()

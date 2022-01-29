@@ -23,11 +23,15 @@ class Test(TestCase):
     def setUp(self):
         # mock regions
         mock_region_1 = MagicMock()
-        mock_region_2 = MagicMock()
+        mock_region_1.is_empty.return_value = False
         mock_region_1.get_xy_range.return_value = {
             "x_min": 1.0, "x_max": 4.0, "y_min": 2.0,  "y_max": 5.0}
+
+        mock_region_2 = MagicMock()
+        mock_region_2.is_empty.return_value = False
         mock_region_2.get_xy_range.return_value = {
             "x_min": 0.0, "x_max": 3.0, "y_min": 1.0,  "y_max": 8.0}
+
         self.regions = [mock_region_1, mock_region_2]
 
         # mock values
