@@ -3,7 +3,8 @@ import json
 
 from pkwscraper.lib.dbdriver import DbDriver
 from pkwscraper.lib.preprocessing.base_preprocessing import BasePreprocessing
-from pkwscraper.lib.utilities import get_parent_code, Region
+from pkwscraper.lib.region import Region
+from pkwscraper.lib.utilities import get_parent_code
 
 
 ELECTION_TYPE = "sejm"
