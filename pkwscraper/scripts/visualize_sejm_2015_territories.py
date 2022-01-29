@@ -12,7 +12,8 @@ from matplotlib.patches import PathPatch, Polygon
 from matplotlib.path import Path
 
 from pkwscraper.lib.dbdriver import DbDriver
-from pkwscraper.lib.utilities import get_parent_code, Region
+from pkwscraper.lib.region import Region
+from pkwscraper.lib.utilities import get_parent_code
 
 
 ELECTION_TYPE = "sejm"
@@ -130,7 +131,7 @@ class TerritoryVisualizer:
         ]
 
         okregi_kwargs = len(okregi_regions) * [
-            {"facecolor": (0, 0, 0, 0), "edgecolor": "k"}]
+            {"facecolor": None, "fill": False, "edgecolor": "k"}]
 
         # preprocess gminy
         gminy_data = self.get_invalid()
@@ -188,9 +189,11 @@ class TerritoryVisualizer:
             color = [red, green, blue]
             gminy_kwargs.append({"color": color})
 
-        # concatenate data
-        regions = okregi_regions + gminy_regions
-        kwargs_list = okregi_kwargs + gminy_kwargs
+        # make patches for ploting
+        gminy_collection = Region.to_mpl_collection(
+            regions=gminy_regions, kwargs_list=gminy_kwargs, alpha=0.82)
+        okregi_collection = Region.to_mpl_collection(
+            regions=okregi_regions, kwargs_list=okregi_kwargs)
 
         # prepare plot
         x_min = min(reg.get_xy_range()["x_min"] for reg in okregi_regions)
@@ -205,11 +208,10 @@ class TerritoryVisualizer:
         ax.set_ylim(y_min, y_max)
         ax.invert_yaxis()
 
-        path_collection = Region.to_mpl_collection(
-            regions=regions, kwargs_list=kwargs_list, alpha=0.82)
+        ax.add_collection(gminy_collection)
+        ax.add_collection(okregi_collection)
 
-        ax.add_collection(path_collection)
-
+        # show plot
         plt.show()
         plt.close()
 
