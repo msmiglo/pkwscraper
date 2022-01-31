@@ -116,7 +116,7 @@ class TerritoryVisualizer:
             if not gmina["region"].is_empty()
         ]
         gminy_regions = [gmina["region"] for gmina in gminy]
-        gminy_measures = []
+        gminy_values = []
 
         for gmina in gminy:
             # calculate measures
@@ -131,40 +131,25 @@ class TerritoryVisualizer:
             too_many_absolute = invalid_2_candidates / ballots_valid
 
             # add element
-            gminy_measures.append([
+            gminy_values.append([
                 invalid_percent,
                 too_many_candidates_percent,
                 too_many_absolute
             ])
 
-        # take max values for scaling
-        max_invalid = max(gmina[0] for gmina in gminy_measures)
-        max_too_many = max(gmina[1] for gmina in gminy_measures)
-        max_too_many_abs = max(gmina[2] for gmina in gminy_measures)
+        # take max values
+        max_invalid = max(gmina[0] for gmina in gminy_values)
+        max_too_many = max(gmina[1] for gmina in gminy_values)
+        max_too_many_abs = max(gmina[2] for gmina in gminy_values)
         print(f"max invalid votes percentage: {max_invalid}")
         print(f"max too many candidates percentage: {max_too_many}")
         print(f"max too many candidates absolute: {max_too_many_abs}")
 
-        # prepare gminy visualization
-        gminy_values = []
-
-        for invalid_percent, too_many_candidates_percent, \
-                too_many_absolute in gminy_measures:
-
-            # scale values
-            invalid_percent /= max_invalid
-            too_many_candidates_percent /= max_too_many
-            too_many_absolute /= max_too_many_abs
-
-            gminy_values.append([
-                invalid_percent, too_many_candidates_percent,
-                too_many_absolute])
-
         # make colormap
-        def colormap(measures):
+        def colormap(values):
             # unpack measures
             invalid_percent, too_many_candidates_percent, \
-                too_many_absolute = measures
+                too_many_absolute = values
 
             # determine color components
             red = too_many_candidates_percent
@@ -181,9 +166,9 @@ class TerritoryVisualizer:
             values=gminy_values,
             colormap=colormap,
             background=okregi_regions,
-            #normalizing_range=[(0, 1), (0, 1) (0, 1)]
+            normalization_range=[(0, 1), (0, 1), (0, 1)]
         )
-        #vis.normalize_values()
+        vis.normalize_values()
         vis.render_colors()
         vis.prepare()
         vis.show()
