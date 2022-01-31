@@ -61,6 +61,7 @@ class TestVisualizer(TestCase):
                        normalization_range=[1, 0])
         vis = Visualizer(self.regions, self.values, self.colormap)
         # assert
+        self.assertIsNone(vis._values_dimension)
         self.assertListEqual(vis.regions, self.regions)
         self.assertListEqual(vis.values, self.values)
         self.assertIs(vis.colormap, self.colormap)
