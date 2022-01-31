@@ -7,11 +7,13 @@ from pkwscraper.lib.region import Region
 from pkwscraper.lib.visualizer import Visualizer
 
 
-class Test(TestCase):
+class TestVisualizer(TestCase):
     """
     unit tests:
     - test init
+    - test init vector values
     - test normalize values
+    - test normalize vector values
     - test render colors
     - test prepare
     - test save image
@@ -69,6 +71,17 @@ class Test(TestCase):
         self.assertFalse(vis.color_legend)
         self.assertFalse(vis.grid)
 
+    def test_init_vector_values(self):
+        vis = Visualizer(
+            regions=self.regions,
+            values=[(0, 6, 7, 8, 9), (1, 2, 3, 4, 5)],
+            colormap=self.colormap
+        )
+        self.assertEqual(vis._values_dimension, 5)
+        self.assertEqual(len(vis.values), 2)
+        self.assertTupleEqual(vis.normalization_range,
+                              ((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)))
+
     def test_normalize_values(self):
         # arrange
         vis = Visualizer(self.regions, self.values, self.colormap,
@@ -78,6 +91,20 @@ class Test(TestCase):
         # assert
         self.assertIsNone(result)
         self.assertListEqual(vis.values, [2, 0.5])
+
+    def test_normalize_vector_values(self):
+        # arrange
+        vis = Visualizer(
+            regions=self.regions,
+            values=[(0, 6, 7, 8, 9), (1, 2, 3, 4, 5)],
+            colormap=self.colormap,
+            normalization_range=[2, 5]
+        )
+        # act
+        result = vis.normalize_values()
+        # assert
+        self.assertIsNone(result)
+        self.assertListEqual(vis.values, [(2, 5, 5, 5, 5), (5, 2, 2, 2, 2)])
 
     def test_render_colors(self):
         # arrange
