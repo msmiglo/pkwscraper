@@ -55,38 +55,44 @@ class Visualizer:
             colors or not (in form of colorbar or color square or sth)
         grid: bool - whether to plot or not a square frame around map
         """
-        # check regions and values count
+        # check number of regions and values
         if len(regions) != len(values):
             raise ValueError(
                 "`regions` and `values` must be of same length.")
 
-        # check dimension of values
+        # check dimensions
         values_shape = np.shape(values)
-        try:
-            self._values_dimension = values_shape[1]
-        except IndexError:
-            self._values_dimension = None
-
-        # check normalization range
         range_shape = np.shape(normalization_range)
-        if range_shape[-1] != 2:
+
+        if np.ndim(values) == 2:
+            # values dimensions (vector length)
+            self._vdim = values_shape[1]
+        else:
+            # scalar values
+            self._vdim = None
+
+        if not range_shape[-1] == 2:
             raise ValueError("Range should be pair of min and max values.")
 
-        if np.ndim(normalization_range) == 1:
+        if np.ndim(normalization_range) == 2:
+            # check matching dimension
+            if range_shape[0] != values_shape[1]:
+                raise ValueError("Pass single range or list of ranges for"
+                                 " each dimension of value vectors.")
+            # check if ranges satisfy `min < max` condition
+            range_array = np.array(normalization_range)
+            if not all(range_array[:, 0] < range_array[:, 1]):
+                raise ValueError("Second value of range must"
+                                 " be greater than first value.")
+        else:
+            # check `min < max`
             if not normalization_range[0] < normalization_range[1]:
                 raise ValueError("Second value of `normalization_range` must"
                                  " be greater than first value.")
-        else:
-            for pair in normalization_range:
-                if not pair[0] < pair[1]:
-                    raise ValueError("Second value of range must"
-                                     " be greater than first value.")
-
-        # make normalization range for multidimensional
-        if self._values_dimension:
-            if np.ndim(normalization_range) == 1:
-                normalization_range = tuple(
-                    normalization_range for i in range(self._values_dimension))
+            # expand normalization range to match values dimension
+            if self._vdim:
+                normalization_range = tuple(normalization_range
+                                            for i in range(self._vdim))
 
         # assign values
         self.regions = regions
@@ -99,6 +105,15 @@ class Visualizer:
         self.color_legend = color_legend
         self.grid = grid
 
+        # remember mins and maxs of values
+        ###############################################
+        ###############################################
+        ############### TODO - USE TO PLOTING LEGEND AND COLOR KEY
+        ###############################################
+        ###############################################
+        self.maxs = None
+        self.mins = None
+
     def scale(self):
         """
         # DEPRECATED
@@ -108,46 +123,42 @@ class Visualizer:
 
     def normalize_values(self):
         """ Scale values of all individual units to fit desired range. """
-        ###############################################
-        ###############################################
-        ############### TODO - REFACTOR MAYBE
-        ###############################################
-        ###############################################
-        ############## division by zeros can happen if not values dispersion
-        ###############################################
-        if self._values_dimension is None:
+        # prepare data
+        values = np.array(self.values, dtype=float)
+        mins = np.amin(values, axis=0)
+        maxs = np.amax(values, axis=0)
+
+        # normalize
+        if self._vdim is None:
             # one-dimensional (scalar) values
-            min_value = min(self.values)
-            max_value = max(self.values)
+            new_min, new_max = self.normalization_range
 
-            target_min, target_max = self.normalization_range
+            if maxs > mins:
+                values = (values - mins) / (maxs - mins)
+                values = values * (new_max - new_min) + new_min
+            else:
+                values = values * 0 + (new_min + new_max) / 2
 
-            def _normalize(value):
-                v = (value - min_value) / (max_value - min_value)
-                target_value = v * (target_max - target_min) + target_min
-                return target_value
-
-            self.values = list(map(_normalize, self.values))
         else:
             # multi-dimensional (vector) values
-            mins = [min(value[i] for value in self.values)
-                    for i in range(self._values_dimension)]
-            maxs = [max(value[i] for value in self.values)
-                    for i in range(self._values_dimension)]
+            for i in range(self._vdim):
+                values_i = values[:, i]
+                mini = mins[i]
+                maxi = maxs[i]
+                new_mini, new_maxi = self.normalization_range[i]
 
-            def _normalize(vector):
-                v = [
-                    (vi - mini) / (maxi - mini)
-                    for vi, mini, maxi in zip(vector, mins, maxs)
-                ]
-                target_vector = tuple(
-                    vi * (maxi - mini) + mini
-                    for vi, (mini, maxi)
-                    in zip(v, self.normalization_range)
-                )
-                return target_vector
+                if maxi > mini:
+                    values_i = (values_i - mini) / (maxi - mini)
+                    values_i = values_i * (new_maxi - new_mini) + new_mini
+                else:
+                    values_i = values_i * 0 + (new_mini + new_maxi) / 2
 
-            self.values = list(map(_normalize, self.values))
+                values[:, i] = values_i
+
+        # keep results
+        self.values = values.tolist()
+        self.mins = mins.tolist()
+        self.maxs = maxs.tolist()
 
     def render_colors(self):
         """ Convert values to colors using colormap. """

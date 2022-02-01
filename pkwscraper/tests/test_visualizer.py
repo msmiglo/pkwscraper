@@ -61,7 +61,7 @@ class TestVisualizer(TestCase):
                        normalization_range=[1, 0])
         vis = Visualizer(self.regions, self.values, self.colormap)
         # assert
-        self.assertIsNone(vis._values_dimension)
+        self.assertIsNone(vis._vdim)
         self.assertListEqual(vis.regions, self.regions)
         self.assertListEqual(vis.values, self.values)
         self.assertIs(vis.colormap, self.colormap)
@@ -78,10 +78,17 @@ class TestVisualizer(TestCase):
             values=[(0, 6, 7, 8, 9), (1, 2, 3, 4, 5)],
             colormap=self.colormap
         )
-        self.assertEqual(vis._values_dimension, 5)
+        self.assertEqual(vis._vdim, 5)
         self.assertEqual(len(vis.values), 2)
         self.assertTupleEqual(vis.normalization_range,
                               ((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)))
+
+        vis_2 = Visualizer(
+            regions=self.regions,
+            values=[(0, 6, 7, 8, 9), (1, 2, 3, 4, 5)],
+            colormap=self.colormap,
+            normalization_range=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1)]
+        )
 
     def test_normalize_values(self):
         # arrange
@@ -105,7 +112,7 @@ class TestVisualizer(TestCase):
         result = vis.normalize_values()
         # assert
         self.assertIsNone(result)
-        self.assertListEqual(vis.values, [(2, 5, 5, 5, 5), (5, 2, 2, 2, 2)])
+        self.assertListEqual(vis.values, [[2, 5, 5, 5, 5], [5, 2, 2, 2, 2]])
 
     def test_render_colors(self):
         # arrange
