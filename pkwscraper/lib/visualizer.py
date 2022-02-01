@@ -5,7 +5,7 @@ Concepts dictionary explained:
     commune (or whole country);
 - values - values assigned to each territorial unit as data to plot;
     this is an input to colormap;
-- background - contours of some units of other granularity that will be
+- contours - some units of other granularity that will be
     plotted as contours on top of map;
 - colormap - a mapping from numerical values (or vectors) to colors;
 - normalizing - converting values for all units to fit into given range;
@@ -24,25 +24,23 @@ Concepts dictionary explained:
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
 
 from pkwscraper.lib.region import Region
 
 
 class Visualizer:
     def __init__(
-        self, regions, values, colormap, background=None,
+        self, regions, values, colormap, contours=None,
         interpolation="linear", normalization_range=(0, 1),
         title=None, color_legend=False, grid=False
     ):
         """
-        ###############
-        ############### TODO: rename background to sth like "grid" or sth
-        ###############
         regions: list of Regions - list of regions to color
         values: list of float - list of values corresponding to regions
         colormap: Colormap - a mapping turning numerical values to
             colors
-        background: list of Regions - contours to put on final map
+        contours: list of Regions - contours to put on final map
             without any values or filling
         interpolation: 'linear' or 'logarithmic' - method of
             interpolation of values on colormap
@@ -54,25 +52,71 @@ class Visualizer:
             colors or not (in form of colorbar or color square or sth)
         grid: bool - whether to plot or not a square frame around map
         """
+        # check number of regions and values
         if len(regions) != len(values):
             raise ValueError(
                 "`regions` and `values` must be of same length.")
 
-        if not normalization_range[1] > normalization_range[0]:
-            raise ValueError("Second value of `normalization_range` must"
-                             " be greater than first value.")
+        # check dimensions
+        values_shape = np.shape(values)
+        range_shape = np.shape(normalization_range)
 
+        if np.ndim(values) == 2:
+            # values dimensions (vector length)
+            self._vdim = values_shape[1]
+        else:
+            # scalar values
+            self._vdim = None
+
+        if not range_shape[-1] == 2:
+            raise ValueError("Range should be pair of min and max values.")
+
+        if np.ndim(normalization_range) == 2:
+            # check matching dimension
+            if range_shape[0] != values_shape[1]:
+                raise ValueError("Pass single range or list of ranges for"
+                                 " each dimension of value vectors.")
+            # check if ranges satisfy `min < max` condition
+            range_array = np.array(normalization_range)
+            if not all(range_array[:, 0] < range_array[:, 1]):
+                raise ValueError("Second value of range must"
+                                 " be greater than first value.")
+        else:
+            # check `min < max`
+            if not normalization_range[0] < normalization_range[1]:
+                raise ValueError("Second value of `normalization_range` must"
+                                 " be greater than first value.")
+            # expand normalization range to match values dimension
+            if self._vdim:
+                normalization_range = tuple(normalization_range
+                                            for i in range(self._vdim))
+
+        # assign values
         self.regions = regions
         self.values = values
         self.colormap = colormap
-        self.background = background
+        self.contours = contours
         self.interpolation = interpolation
         self.normalization_range = normalization_range
         self.title = title
         self.color_legend = color_legend
         self.grid = grid
 
+        # remember mins and maxs of values
+        ###############################################
+        ###############################################
+        ############### TODO - USE TO PLOTING LEGEND AND COLOR KEY
+        ###############################################
+        ###############################################
+        self.maxs = None
+        self.mins = None
+
     def scale(self):
+        ################################
+        ################################
+        ####### TODO - DEPRECATED
+        ################################
+        ################################
         """
         # DEPRECATED
         Scale geometric data to fit into given coordinates.
@@ -81,25 +125,42 @@ class Visualizer:
 
     def normalize_values(self):
         """ Scale values of all individual units to fit desired range. """
-        # one dimensional (scalar) values
-        min_value = min(self.values)
-        max_value = max(self.values)
+        # prepare data
+        values = np.array(self.values, dtype=float)
+        mins = np.amin(values, axis=0)
+        maxs = np.amax(values, axis=0)
 
-        target_min, target_max = self.normalization_range
+        # normalize
+        if self._vdim is None:
+            # one-dimensional (scalar) values
+            new_min, new_max = self.normalization_range
 
-        def _normalize(value):
-            v = (value - min_value) / (max_value - min_value)
-            target_value = v * (target_max - target_min) + target_min
-            return target_value
+            if maxs > mins:
+                values = (values - mins) / (maxs - mins)
+                values = values * (new_max - new_min) + new_min
+            else:
+                values = values * 0 + (new_min + new_max) / 2
 
-        self.values = list(map(_normalize, self.values))
-        return
+        else:
+            # multi-dimensional (vector) values
+            for i in range(self._vdim):
+                values_i = values[:, i]
+                mini = mins[i]
+                maxi = maxs[i]
+                new_mini, new_maxi = self.normalization_range[i]
 
-        # multidimensional values (vector)
-        ###############
-        ############### TODO: support vector values
-        ###############
-        raise NotImplementedError("Not implemented yet.")
+                if maxi > mini:
+                    values_i = (values_i - mini) / (maxi - mini)
+                    values_i = values_i * (new_maxi - new_mini) + new_mini
+                else:
+                    values_i = values_i * 0 + (new_mini + new_maxi) / 2
+
+                values[:, i] = values_i
+
+        # keep results
+        self.values = values.tolist()
+        self.mins = mins.tolist()
+        self.maxs = maxs.tolist()
 
     def render_colors(self):
         """ Convert values to colors using colormap. """
@@ -120,12 +181,12 @@ class Visualizer:
         path_collection = Region.to_mpl_collection(
             regions=self.regions, kwargs_list=kwargs_list, antialiased=True)
 
-        # get patch collection of background units contours
-        if self.background:
-            background_kwargs = len(self.background) * [
+        # get patch collection of bigger units contours
+        if self.contours:
+            contours_kwargs = len(self.contours) * [
                 {"facecolor": None, "fill": False, "edgecolor": "k"}]
-            background_collection = Region.to_mpl_collection(
-                regions=self.background, kwargs_list=background_kwargs,
+            contours_collection = Region.to_mpl_collection(
+                regions=self.contours, kwargs_list=contours_kwargs,
                 antialiased=True)
 
         # make plot
@@ -137,8 +198,8 @@ class Visualizer:
 
         # put patches on axes
         ax.add_collection(path_collection)
-        if self.background:
-            ax.add_collection(background_collection)
+        if self.contours:
+            ax.add_collection(contours_collection)
 
     def save_image(self, filepath):
         """ Render plot to file. """

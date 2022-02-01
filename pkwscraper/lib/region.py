@@ -159,11 +159,17 @@ class Region:
 
     @property
     def filling_boundaries_line(self):
+        ################################
+        ################################
+        ####### TODO - DEPRECATED
+        ################################
+        ################################
         """
         Get single line that defines region area with possible holes
         and separate shapes. This contains segments that join shapes
         and holes, so it is NOT suitable to draw contour of region.
         """
+        raise NotImplementedError("Deprecated.")
         points = []
         for shape in self.data:
             for curve in shape:
@@ -175,11 +181,17 @@ class Region:
 
     @property
     def contour_lines(self):
+        ################################
+        ################################
+        ####### TODO - DEPRECATED
+        ################################
+        ################################
         """
         Get set of lines that defines edge of region with possible holes
         and separate shapes. This does NOT contain segments that join
         separate shapes, so it IS suitable to draw contour of region.
         """
+        raise NotImplementedError("Deprecated.")
         lines = []
         for shape in self.data:
             for curve in shape:

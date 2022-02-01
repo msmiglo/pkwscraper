@@ -7,11 +7,13 @@ from pkwscraper.lib.region import Region
 from pkwscraper.lib.visualizer import Visualizer
 
 
-class Test(TestCase):
+class TestVisualizer(TestCase):
     """
     unit tests:
     - test init
+    - test init vector values
     - test normalize values
+    - test normalize vector values
     - test render colors
     - test prepare
     - test save image
@@ -59,15 +61,34 @@ class Test(TestCase):
                        normalization_range=[1, 0])
         vis = Visualizer(self.regions, self.values, self.colormap)
         # assert
+        self.assertIsNone(vis._vdim)
         self.assertListEqual(vis.regions, self.regions)
         self.assertListEqual(vis.values, self.values)
         self.assertIs(vis.colormap, self.colormap)
-        self.assertIsNone(vis.background)
+        self.assertIsNone(vis.contours)
         self.assertEqual(vis.interpolation, "linear")
         self.assertTupleEqual(vis.normalization_range, (0, 1))
         self.assertIsNone(vis.title)
         self.assertFalse(vis.color_legend)
         self.assertFalse(vis.grid)
+
+    def test_init_vector_values(self):
+        vis = Visualizer(
+            regions=self.regions,
+            values=[(0, 6, 7, 8, 9), (1, 2, 3, 4, 5)],
+            colormap=self.colormap
+        )
+        self.assertEqual(vis._vdim, 5)
+        self.assertEqual(len(vis.values), 2)
+        self.assertTupleEqual(vis.normalization_range,
+                              ((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)))
+
+        vis_2 = Visualizer(
+            regions=self.regions,
+            values=[(0, 6, 7, 8, 9), (1, 2, 3, 4, 5)],
+            colormap=self.colormap,
+            normalization_range=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1)]
+        )
 
     def test_normalize_values(self):
         # arrange
@@ -78,6 +99,20 @@ class Test(TestCase):
         # assert
         self.assertIsNone(result)
         self.assertListEqual(vis.values, [2, 0.5])
+
+    def test_normalize_vector_values(self):
+        # arrange
+        vis = Visualizer(
+            regions=self.regions,
+            values=[(0, 6, 7, 8, 9), (1, 2, 3, 4, 5)],
+            colormap=self.colormap,
+            normalization_range=[2, 5]
+        )
+        # act
+        result = vis.normalize_values()
+        # assert
+        self.assertIsNone(result)
+        self.assertListEqual(vis.values, [[2, 5, 5, 5, 5], [5, 2, 2, 2, 2]])
 
     def test_render_colors(self):
         # arrange
@@ -92,7 +127,7 @@ class Test(TestCase):
         # arrange
         mock_2 = self.regions[1]
         vis = Visualizer(self.regions, self.values, self.colormap,
-                         background=[mock_2])
+                         contours=[mock_2])
         vis.colors = self.colors
         MockRegionClass = MagicMock()
         mock_ax = MagicMock()
@@ -160,7 +195,7 @@ class Test(TestCase):
             return (red, green, blue, alpha)
 
         # create visualizer
-        vis = Visualizer(regions, values, colormap, background=[whole_region],
+        vis = Visualizer(regions, values, colormap, contours=[whole_region],
                          title="Test plot")
 
         # call preparations
