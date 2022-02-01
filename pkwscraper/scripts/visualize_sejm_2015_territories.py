@@ -137,14 +137,6 @@ class TerritoryVisualizer:
                 too_many_absolute
             ])
 
-        # take max values
-        max_invalid = max(gmina[0] for gmina in gminy_values)
-        max_too_many = max(gmina[1] for gmina in gminy_values)
-        max_too_many_abs = max(gmina[2] for gmina in gminy_values)
-        print(f"max invalid votes percentage: {max_invalid}")
-        print(f"max too many candidates percentage: {max_too_many}")
-        print(f"max too many candidates absolute: {max_too_many_abs}")
-
         # make colormap
         def colormap(values):
             # unpack measures
@@ -172,6 +164,11 @@ class TerritoryVisualizer:
         vis.render_colors()
         vis.prepare()
         vis.show()
+
+        # show max values
+        print(f"max invalid votes percentage: {vis.maxs[0]}")
+        print(f"max too many candidates percentage: {vis.maxs[1]}")
+        print(f"max too many candidates absolute: {vis.maxs[2]}")
 
 
 if __name__ == "__main__":
