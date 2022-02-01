@@ -29,6 +29,46 @@ import numpy as np
 from pkwscraper.lib.region import Region
 
 
+class Colormap:
+    def __init__(self, color_data, interpolation="linear",
+                 legend=False, color_descriptions=None,
+                 numerical_values=True):
+        """
+        color_data: ...
+        interpolation: 'linear' or 'logarithmic' - method of
+            interpolation of values on colormap
+        legend: bool - whether to put explanation of extreme colors
+            or not (in form of colorbar or color square or sth)
+        color_descriptions: ...
+        numerical_values: bool - whether to put the percentage values
+            corresponding to extreme colors on plot or not
+        """
+        pass
+
+    def _1d_interpolate(self):
+        """ Interpolate color on 1-dimensional segment. """
+        pass
+
+    def _nd_interpolate(self):
+        """
+        Interpolate color in N-dimensional space using triangular mesh.
+        """
+        pass
+
+    def __call__(self, value):
+        """
+        Map scalar or vector value on color.
+
+        value: int/float/list/tuple - values to convert
+        return: tuple of 3/4 floats in range [0-1] - RGB or RGBA
+        """
+        pass
+
+    def make_legend(self, ax):
+        """ Add color legend to provided axes. """
+        pass
+
+
 class Visualizer:
     def __init__(
         self, regions, values, colormap, contours=None,
@@ -38,8 +78,8 @@ class Visualizer:
         """
         regions: list of Regions - list of regions to color
         values: list of float - list of values corresponding to regions
-        colormap: Colormap - a mapping turning numerical values to
-            colors
+        colormap: Colormap or callable - a mapping turning numerical
+            values to colors
         contours: list of Regions - contours to put on final map
             without any values or filling
         interpolation: 'linear' or 'logarithmic' - method of
