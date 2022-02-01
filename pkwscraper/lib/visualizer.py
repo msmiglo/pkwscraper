@@ -5,7 +5,7 @@ Concepts dictionary explained:
     commune (or whole country);
 - values - values assigned to each territorial unit as data to plot;
     this is an input to colormap;
-- background - contours of some units of other granularity that will be
+- contours - some units of other granularity that will be
     plotted as contours on top of map;
 - colormap - a mapping from numerical values (or vectors) to colors;
 - normalizing - converting values for all units to fit into given range;
@@ -31,19 +31,16 @@ from pkwscraper.lib.region import Region
 
 class Visualizer:
     def __init__(
-        self, regions, values, colormap, background=None,
+        self, regions, values, colormap, contours=None,
         interpolation="linear", normalization_range=(0, 1),
         title=None, color_legend=False, grid=False
     ):
         """
-        ###############
-        ############### TODO: rename background to sth like "grid" or sth
-        ###############
         regions: list of Regions - list of regions to color
         values: list of float - list of values corresponding to regions
         colormap: Colormap - a mapping turning numerical values to
             colors
-        background: list of Regions - contours to put on final map
+        contours: list of Regions - contours to put on final map
             without any values or filling
         interpolation: 'linear' or 'logarithmic' - method of
             interpolation of values on colormap
@@ -98,7 +95,7 @@ class Visualizer:
         self.regions = regions
         self.values = values
         self.colormap = colormap
-        self.background = background
+        self.contours = contours
         self.interpolation = interpolation
         self.normalization_range = normalization_range
         self.title = title
@@ -115,6 +112,11 @@ class Visualizer:
         self.mins = None
 
     def scale(self):
+        ################################
+        ################################
+        ####### TODO - DEPRECATED
+        ################################
+        ################################
         """
         # DEPRECATED
         Scale geometric data to fit into given coordinates.
@@ -179,12 +181,12 @@ class Visualizer:
         path_collection = Region.to_mpl_collection(
             regions=self.regions, kwargs_list=kwargs_list, antialiased=True)
 
-        # get patch collection of background units contours
-        if self.background:
-            background_kwargs = len(self.background) * [
+        # get patch collection of bigger units contours
+        if self.contours:
+            contours_kwargs = len(self.contours) * [
                 {"facecolor": None, "fill": False, "edgecolor": "k"}]
-            background_collection = Region.to_mpl_collection(
-                regions=self.background, kwargs_list=background_kwargs,
+            contours_collection = Region.to_mpl_collection(
+                regions=self.contours, kwargs_list=contours_kwargs,
                 antialiased=True)
 
         # make plot
@@ -196,8 +198,8 @@ class Visualizer:
 
         # put patches on axes
         ax.add_collection(path_collection)
-        if self.background:
-            ax.add_collection(background_collection)
+        if self.contours:
+            ax.add_collection(contours_collection)
 
     def save_image(self, filepath):
         """ Render plot to file. """

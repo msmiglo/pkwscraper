@@ -157,7 +157,7 @@ class TerritoryVisualizer:
             regions=gminy_regions,
             values=gminy_values,
             colormap=colormap,
-            background=okregi_regions,
+            contours=okregi_regions,
             normalization_range=[(0, 1), (0, 1), (0, 1)]
         )
         vis.normalize_values()

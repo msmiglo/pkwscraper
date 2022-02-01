@@ -65,7 +65,7 @@ class TestVisualizer(TestCase):
         self.assertListEqual(vis.regions, self.regions)
         self.assertListEqual(vis.values, self.values)
         self.assertIs(vis.colormap, self.colormap)
-        self.assertIsNone(vis.background)
+        self.assertIsNone(vis.contours)
         self.assertEqual(vis.interpolation, "linear")
         self.assertTupleEqual(vis.normalization_range, (0, 1))
         self.assertIsNone(vis.title)
@@ -127,7 +127,7 @@ class TestVisualizer(TestCase):
         # arrange
         mock_2 = self.regions[1]
         vis = Visualizer(self.regions, self.values, self.colormap,
-                         background=[mock_2])
+                         contours=[mock_2])
         vis.colors = self.colors
         MockRegionClass = MagicMock()
         mock_ax = MagicMock()
@@ -195,7 +195,7 @@ class TestVisualizer(TestCase):
             return (red, green, blue, alpha)
 
         # create visualizer
-        vis = Visualizer(regions, values, colormap, background=[whole_region],
+        vis = Visualizer(regions, values, colormap, contours=[whole_region],
                          title="Test plot")
 
         # call preparations
