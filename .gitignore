@@ -7,6 +7,10 @@
 /pkwscraper/data/**/*.html
 /pkwscraper/data/**/*.blob
 /pkwscraper/data/**/*.zip
+/pkwscraper/data/**/*.png
+/pkwscraper/data/**/*.jpeg
+/pkwscraper/data/**/*.jpg
+/pkwscraper/data/**/*.svg
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
