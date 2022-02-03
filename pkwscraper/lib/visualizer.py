@@ -4,7 +4,7 @@ Concepts dictionary explained:
 - unit / territorial unit - single voivodship, constituency, district or
     commune (or whole country);
 - values - values assigned to each territorial unit as data to plot;
-    this is an input to colormap;
+    this is an input to colormap; can be scalars or vectors
 - contours - some units of other granularity that will be
     plotted as contours on top of map;
 - colormap - a mapping from numerical values (or vectors) to colors;
@@ -23,6 +23,7 @@ Concepts dictionary explained:
 """
 
 import matplotlib as mpl
+from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -30,30 +31,117 @@ from pkwscraper.lib.region import Region
 
 
 class Colormap:
-    def __init__(self, color_data, interpolation="linear",
-                 legend=False, color_descriptions=None,
-                 numerical_values=True):
+    def __init__(self, color_data, interpolation="linear"):
         """
-        color_data: ...
+        Create color mapping using matplotlib defined colormap or dict
+        data for conversion from point to color. Data with integer
+        values will be divided by 255.
+
+        color_data: matplotlib.colors.LinearSegmentedColormap or dict
+            of {value: color} - the data defining colorspace; values
+            can be scalars or vectors; colors can be RGB or RGBA of
+            `float` type (range [0.0-1.0]) or `int` (range [0-255])
         interpolation: 'linear' or 'logarithmic' - method of
             interpolation of values on colormap
-        legend: bool - whether to put explanation of extreme colors
-            or not (in form of colorbar or color square or sth)
-        color_descriptions: ...
-        numerical_values: bool - whether to put the percentage values
-            corresponding to extreme colors on plot or not
         """
-        pass
+        # check correctness
+        if not interpolation in ["linear", "logarithmic"]:
+            raise ValueError("Interpolation can be 'linear' or 'logarithmic'.")
+        self.interpolation = interpolation
 
-    def _1d_interpolate(self):
+        # matplotlib object
+        if isinstance(color_data, LinearSegmentedColormap):
+            self.__data = color_data
+            self._vdim = None
+            return
+
+        # convert RGBA integer range (0-255) to float range (0.0-1.0)
+        is_integer_rgba = all(all(isinstance(c, int) for c in color)
+                              for color in color_data.values())
+        if is_integer_rgba:
+            self.__data = {
+                point: tuple(c / 255 for c in color)
+                for point, color in color_data.items()
+            }
+        else:
+            self.__data = dict(color_data)
+
+        # determine length of vector values
+        points = np.array(list(color_data))
+        if points.ndim == 2:
+            self._vdim = points.shape[1]
+        else:
+            self._vdim = None
+
+    def _1d_interpolate(self, value):
         """ Interpolate color on 1-dimensional segment. """
-        pass
+        points = list(sorted(self.__data))
 
-    def _nd_interpolate(self):
+        # find segment the value belongs to
+        #     Algorithm explanation:
+        #     Assume that `n` is a number of points in `data`, then
+        #     `n-1` is a number of segments between them. Let's mark
+        #     the area below the lowest point with `0` and the area
+        #     above highest point with the `n`. Consecutive segments
+        #     within `data`'s range are marked from `1` to `n-1`. For
+        #     each but last such area called `i` - the upper boundary
+        #     is `points[i]`. First `i` for which `x <= points[i]`, is
+        #     a number of the area containing it.
+        n = len(points)
+        i = 0
+
+        # values outside interpolation range
+        while i < n:
+            if value <= points[i]:
+                break
+            i += 1
+
+        if i == 0:
+            point = points[0]
+            color = self.__data[point]
+            return color
+        if i == n:
+            point = points[-1]
+            color = self.__data[point]
+            return color
+
+        # linear interpolation
+        lower_point = points[i-1]
+        upper_point = points[i]
+
+        segment_length = upper_point - lower_point
+        lower_weight = (upper_point - value) / segment_length
+        upper_weight = (value - lower_point) / segment_length
+
+        lower_color = np.array(self.__data[lower_point])
+        upper_color = np.array(self.__data[upper_point])
+
+        color = lower_weight * lower_color + upper_weight * upper_color
+        return tuple(color.tolist())
+
+    def _nd_interpolate(self, vector):
         """
-        Interpolate color in N-dimensional space using triangular mesh.
+        Interpolate color in N-dimensional space using weighted average.
         """
-        pass
+        # Algorithm explanation:
+        #     Take all points and compute carthesian distance to them
+        #     on the vector space. Determine contribution of given
+        #     point to the value of final color - the weights based on
+        #     distances are computed. Compose final color as weighted
+        #     average.
+        points = list(self.__data)
+        colors = list(self.__data.values())
+
+        def distance(point, value):
+            return sum((x1-x2)**2 for x1, x2 in zip(point, value)) ** 0.5
+
+        distances = [distance(point, vector) for point in points]
+        weights = [1 / (dist + 0.1)**2 for dist in distances]
+
+        weighted_colors = [weight * np.array(color)
+                           for color, weight in zip(colors, weights)]
+        color = np.sum(weighted_colors, axis=0) / sum(weights)
+        return tuple(color.tolist())
 
     def __call__(self, value):
         """
@@ -62,11 +150,31 @@ class Colormap:
         value: int/float/list/tuple - values to convert
         return: tuple of 3/4 floats in range [0-1] - RGB or RGBA
         """
-        pass
+        # vector value
+        if np.ndim(value) == 1:
+            return self._nd_interpolate(value)
 
-    def make_legend(self, ax):
-        """ Add color legend to provided axes. """
-        pass
+        # use matplotlib colormap
+        if isinstance(self.__data, LinearSegmentedColormap):
+            return self.__data(float(value))
+
+        # scalar value
+        return self._1d_interpolate(value)
+
+    def make_legend(self, ax, color_descriptions=None,
+                    show_extreme_values=True):
+        """
+        Add color legend (explanation of extreme colors) to provided
+        axes. It has a form of colorbar or color square or sth.
+
+        ax: `matplotlib.axes._subplots.AxesSubplot` - subplot axes to
+            draw color leneng on
+        color_descriptions: ... - writings to be put next to described
+            colors
+        show_extreme_values: bool - whether to show the values
+            corresponding to extreme colors on plot or not
+        """
+        raise NotImplementedError("TODO TODO TODO")
 
 
 class Visualizer:
