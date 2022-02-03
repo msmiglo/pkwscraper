@@ -41,6 +41,7 @@ class Colormap:
             of {value: color} - the data defining colorspace; values
             can be scalars or vectors; colors can be RGB or RGBA of
             `float` type (range [0.0-1.0]) or `int` (range [0-255])
+            or `str` name of matplotlib colormap
         interpolation: 'linear' or 'logarithmic' - method of
             interpolation of values on colormap
         """
@@ -52,6 +53,12 @@ class Colormap:
         # matplotlib object
         if isinstance(color_data, LinearSegmentedColormap):
             self.__data = color_data
+            self._vdim = None
+            return
+
+        if isinstance(color_data, str):
+            colormap = plt.get_cmap(color_data)
+            self.__data = colormap
             self._vdim = None
             return
 

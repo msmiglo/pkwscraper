@@ -16,6 +16,7 @@ class TestColormap(TestCase):
     - test init
     - test init vector values
     - test init matplotlib colormap
+    - test init matplotlib colormap name
     - test 1-D interpolate
     - test N-D interpolate
     - test call
@@ -72,6 +73,13 @@ class TestColormap(TestCase):
 
     def test_init_matplotlib_colormap(self):
         cm = Colormap(ocean)
+
+        self.assertIs(cm._Colormap__data, ocean)
+        self.assertEqual(cm.interpolation, "linear")
+        self.assertIsNone(cm._vdim)
+
+    def test_init_matplotlib_colormap_name(self):
+        cm = Colormap("ocean")
 
         self.assertIs(cm._Colormap__data, ocean)
         self.assertEqual(cm.interpolation, "linear")
