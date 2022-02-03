@@ -14,7 +14,7 @@ from matplotlib.path import Path
 from pkwscraper.lib.dbdriver import DbDriver
 from pkwscraper.lib.region import Region
 from pkwscraper.lib.utilities import get_parent_code
-from pkwscraper.lib.visualizer import Visualizer
+from pkwscraper.lib.visualizer import Colormap, Visualizer
 
 
 ELECTION_TYPE = "sejm"
@@ -138,6 +138,7 @@ class TerritoryVisualizer:
             ])
 
         # make colormap
+        '''
         def colormap(values):
             # unpack measures
             invalid_percent, too_many_candidates_percent, \
@@ -151,6 +152,18 @@ class TerritoryVisualizer:
 
             # return color
             return [red, green, blue, alpha]
+        '''
+        colormap = Colormap(color_data={
+            (0., 0.): (0.0, 1.0, 0.0, 0.82),
+            (0., 1.): (1.0, 1.0, 0.0, 0.82),
+            (1., 0.): (0.0, 0.0, 1.0, 0.82),
+            (1., 1.): (1.0, 0.0, 0.0, 0.82),
+            #(0.5, 0.5): (0.5, 0.5, 0.0, 0.82),
+            (0.5, 1.0): (1.0, 0.5, 0.0, 0.82),
+            (0.5, 0.0): (0.0, 0.5, 0.5, 0.82),
+            (1.0, 0.5): (0.5, 0.0, 0.5, 0.82),
+            (0.0, 0.5): (0.5, 1.0, 0.0, 0.82),
+        })
 
         # make visualizer
         vis = Visualizer(
