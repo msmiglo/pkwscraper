@@ -157,48 +157,6 @@ class Region:
             patches, match_original=True, **collection_kwargs)
         return collection
 
-    @property
-    def filling_boundaries_line(self):
-        ################################
-        ################################
-        ####### TODO - DEPRECATED
-        ################################
-        ################################
-        """
-        Get single line that defines region area with possible holes
-        and separate shapes. This contains segments that join shapes
-        and holes, so it is NOT suitable to draw contour of region.
-        """
-        raise NotImplementedError("Deprecated.")
-        points = []
-        for shape in self.data:
-            for curve in shape:
-                for point in curve:
-                    points.append(list(point))
-                start_point = curve[0]
-                points.append(list(start_point))
-        return points
-
-    @property
-    def contour_lines(self):
-        ################################
-        ################################
-        ####### TODO - DEPRECATED
-        ################################
-        ################################
-        """
-        Get set of lines that defines edge of region with possible holes
-        and separate shapes. This does NOT contain segments that join
-        separate shapes, so it IS suitable to draw contour of region.
-        """
-        raise NotImplementedError("Deprecated.")
-        lines = []
-        for shape in self.data:
-            for curve in shape:
-                new_curve = list(curve) + [curve[0]]
-                lines.append(new_curve)
-        return lines
-
     def is_empty(self):
         """
         Check if Region is empty (has no geometric entities defined).

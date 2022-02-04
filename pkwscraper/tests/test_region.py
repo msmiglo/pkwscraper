@@ -186,18 +186,6 @@ class TestRegion(TestCase):
         self.assertEqual(len(mpl_collection.get_paths()), 2)
         self.assertIsInstance(mpl_collection, PatchCollection)
 
-    @skip("Deprecated.")
-    def test_filling_boundaries_line(self):
-        region = Region(self.region_data)
-        line = region.filling_boundaries_line
-        self.assertEqual(len(line), 34)
-
-    @skip("Deprecated.")
-    def test_contour_lines(self):
-        region = Region(self.region_data)
-        lines = region.contour_lines
-        self.assertEqual(len(lines), 4)
-
     def test_is_empty(self):
         region_1 = Region(self.region_data)
         self.assertFalse(region_1.is_empty())

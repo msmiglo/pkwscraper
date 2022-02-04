@@ -4,8 +4,8 @@ import shutil
 from unittest import main, skip, TestCase
 from unittest.mock import call, MagicMock, patch
 
+import numpy as np
 from pandas import DataFrame, Series
-from pandas import np
 
 from pkwscraper.lib.dbdriver import DbDriver, Record, Table
 

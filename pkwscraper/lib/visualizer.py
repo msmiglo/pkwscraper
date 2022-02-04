@@ -266,18 +266,6 @@ class Visualizer:
         self.maxs = None
         self.mins = None
 
-    def scale(self):
-        ################################
-        ################################
-        ####### TODO - DEPRECATED
-        ################################
-        ################################
-        """
-        # DEPRECATED
-        Scale geometric data to fit into given coordinates.
-        """
-        raise NotImplementedError("rejected")
-
     def normalize_values(self):
         """ Scale values of all individual units to fit desired range. """
         # prepare data
