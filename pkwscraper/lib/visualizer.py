@@ -16,10 +16,6 @@ Concepts dictionary explained:
     all graphical and text elements;
 - map - a part of plot including territorial units, excluding frame,
     legends, title and descriptions.
-
-
-- granularity (not here... TODO - move to explanation of main
-    script/function/class)
 """
 
 import matplotlib as mpl

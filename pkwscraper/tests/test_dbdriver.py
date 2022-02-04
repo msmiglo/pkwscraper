@@ -56,9 +56,9 @@ class TestUUID(TestCase):
 class TestRecord(TestCase):
     """
     - test init
-    - test from dict            # TODO
-    - test from dict no id      # TODO
-    - test from df dict item    # TODO
+    - test from dict
+    - test from dict no id
+    - test from df dict item
     - test get id
     - test get field
     - test get item
