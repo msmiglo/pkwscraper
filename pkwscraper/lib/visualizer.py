@@ -16,10 +16,6 @@ Concepts dictionary explained:
     all graphical and text elements;
 - map - a part of plot including territorial units, excluding frame,
     legends, title and descriptions.
-
-
-- granularity (not here... TODO - move to explanation of main
-    script/function/class)
 """
 
 import matplotlib as mpl
@@ -136,6 +132,9 @@ class Colormap:
         #     point to the value of final color - the weights based on
         #     distances are computed. Compose final color as weighted
         #     average.
+        if len(vector) != self._vdim:
+            raise ValueError(f"Wrong len of values vector, got {len(vector)},"
+                             f" should be: {self._vdim}.")
         points = list(self.__data)
         colors = list(self.__data.values())
 
@@ -265,18 +264,6 @@ class Visualizer:
         ###############################################
         self.maxs = None
         self.mins = None
-
-    def scale(self):
-        ################################
-        ################################
-        ####### TODO - DEPRECATED
-        ################################
-        ################################
-        """
-        # DEPRECATED
-        Scale geometric data to fit into given coordinates.
-        """
-        raise NotImplementedError("rejected")
 
     def normalize_values(self):
         """ Scale values of all individual units to fit desired range. """

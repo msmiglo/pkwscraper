@@ -11,6 +11,7 @@ from matplotlib.collections import PatchCollection
 from matplotlib.patches import PathPatch, Polygon
 from matplotlib.path import Path
 
+from pkwscraper.lib.controller import Controller
 from pkwscraper.lib.dbdriver import DbDriver
 from pkwscraper.lib.region import Region
 from pkwscraper.lib.utilities import get_parent_code
@@ -134,15 +135,16 @@ class TerritoryVisualizer:
             gminy_values.append([
                 invalid_percent,
                 too_many_candidates_percent,
-                too_many_absolute
+                #too_many_absolute
             ])
 
         # make colormap
         '''
         def colormap(values):
             # unpack measures
-            invalid_percent, too_many_candidates_percent, \
-                too_many_absolute = values
+            """invalid_percent, too_many_candidates_percent, \
+                too_many_absolute = values"""
+            invalid_percent, too_many_candidates_percent = values
 
             # determine color components
             red = too_many_candidates_percent
@@ -171,7 +173,7 @@ class TerritoryVisualizer:
             values=gminy_values,
             colormap=colormap,
             contours=okregi_regions,
-            normalization_range=[(0, 1), (0, 1), (0, 1)]
+            normalization_range=[(0, 1), (0, 1)]
         )
         vis.normalize_values()
         vis.render_colors()
@@ -181,10 +183,87 @@ class TerritoryVisualizer:
         # show max values
         print(f"max invalid votes percentage: {vis.maxs[0]}")
         print(f"max too many candidates percentage: {vis.maxs[1]}")
-        print(f"max too many candidates absolute: {vis.maxs[2]}")
+        #print(f"max too many candidates absolute: {vis.maxs[2]}")
+
+
+class NewTerritoryVisualizer:
+    def visualize_2a(self):
+        # make colormap
+        '''
+        def colormap(values):
+            # unpack measures
+            invalid_percent, too_many_candidates_percent, \
+                too_many_absolute = values
+
+            # determine color components
+            red = too_many_candidates_percent
+            green = 1 - invalid_percent
+            blue = min(1, max(0, invalid_percent - red))
+            alpha = 0.82
+
+            # return color
+            return [red, green, blue, alpha]
+        '''
+        colormap = Colormap(color_data={
+            (0., 0.): (0.0, 1.0, 0.0, 0.82),
+            (0., 1.): (1.0, 1.0, 0.0, 0.82),
+            (1., 0.): (0.0, 0.0, 1.0, 0.82),
+            (1., 1.): (1.0, 0.0, 0.0, 0.82),
+            (0.5, 1.0): (1.0, 0.5, 0.0, 0.82),
+            (0.5, 0.0): (0.0, 0.5, 0.5, 0.82),
+            (1.0, 0.5): (0.5, 0.0, 0.5, 0.82),
+            (0.0, 0.5): (0.5, 1.0, 0.0, 0.82),
+        })
+
+        # define evaluating function
+        def function(db):
+            # read protocoles data from polling districts from DB
+            protocoles = db["protokoły"].find(
+                query={},
+                fields=["voters", "ballots_valid", "votes_invalid",
+                        "invalid_2_candidates", "votes_valid"]
+            )
+
+            # initiate sums
+            voters = 0
+            ballots_valid = 0
+            votes_invalid = 0
+            invalid_2_candidates = 0
+            votes_valid = 0
+
+            # iterate over protocoles and sum votes
+            for protocole_record in protocoles:
+                voters += protocole_record[0]
+                ballots_valid += protocole_record[1]
+                votes_invalid += protocole_record[2]
+                invalid_2_candidates += protocole_record[3]
+                votes_valid += protocole_record[4]
+
+            # calculate measures
+            invalid_percent = votes_invalid / ballots_valid
+            too_many_candidates_percent = invalid_2_candidates / votes_invalid
+            too_many_absolute = invalid_2_candidates / ballots_valid
+
+            # return vector of values
+            return invalid_percent, too_many_candidates_percent
+
+        ctrl = Controller(
+            ("Sejm", 2015), function, colormap, granularity="communes",
+            outlines_granularity="constituencies", normalization=True,
+            output_filename="głosy_nieważne.png"
+        )
+        ctrl.run()
+
+        # show max values
+        print(f"max invalid votes percentage: {ctrl.vis.maxs[0]}")
+        print(f"max too many candidates percentage: {ctrl.vis.maxs[1]}")
+        #print(f"max too many candidates absolute: {ctrl.vis.maxs[2]}")
 
 
 if __name__ == "__main__":
+    new_ter_vis = NewTerritoryVisualizer()
+    new_ter_vis.visualize_2a()
+
     ter_vis = TerritoryVisualizer()
     ter_vis.visualize()
     ter_vis.visualize_2()
