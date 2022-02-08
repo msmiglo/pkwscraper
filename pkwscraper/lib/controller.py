@@ -35,6 +35,240 @@ Concepts dictionary explained:
 """
 
 
+class Controller:
+    def __init__(self, elections, function, colormap, granularity,
+                outlines_granularity=None, normalization=True,
+                 title=None, show_legend=False, show_grid=False,
+                 output_filename=None, interpolation='linear'):
+        """
+        output_file - str or None - if None - the result will be
+            displayed in new window
+        """
+        table_names_dict = {
+            "voivodships": "województwa",
+            "constituencies": "okręgi",
+            "districts": "powiaty",
+            "communes": "gminy",
+        }
+        if granularity in table_names_dict:
+            granularity = table_names_dict[granularity]
+        if outlines_granularity in table_names_dict:
+            outlines_granularity = table_names_dict[outlines_granularity]
+
+        # basic correctness checks
+        if granularity not in ["województwa", "okręgi",
+                               "powiaty", "gminy"]:
+            raise ValueError(
+                '`granularity` should be one of: "voivodships", '
+                '"constituencies" or "districts", "communes"')
+
+        if outlines_granularity not in ["województwa", "okręgi",
+                               "powiaty", "gminy"]:
+            raise ValueError(
+                '`outlines_granularity` should be one of: "voivodships", '
+                '"constituencies" or "districts", "communes"')
+
+        self.function = function
+        self.colormap = colormap
+        self.granularity = granularity
+        self.outlines_granularity = outlines_granularity
+        self.normalization = normalization
+        self.title = title
+        self.show_legend = show_legend
+        self.show_grid = show_grid
+        self.output_filename = output_filename
+        self.interpolation = interpolation
+        self.vis = None
+        self.db = None
+
+        # determine election-specific paths and classes
+        # TODO - MOVE TO elections MODULE
+        if not isinstance(elections, tuple) or len(elections) != 2:
+            raise TypeError("Please, provide elections identifier: (type, year).")
+        body, year = elections
+        if not body in ["Sejm", "Senat", "Europarlament",
+                        "Prezydent", "Samorząd", "Referendum"]:
+            raise ValueError('Please specify the election type from: "Sejm", "Senat", "Europarlament", "Prezydent", "Samorząd" or "Referendum".')
+        try:
+            year = int(year)
+        except (TypeError, ValueError):
+            raise ValueError("Please, provide elections year.")
+        self.elected_body = body
+        self.elections_year = year
+        # get election specific addresses and directories
+        #     directories to: raw/rescribed/preprocessed/visualized
+        #     data - that is the images are 4th stage of data
+        #     processing
+        # TODO - MOVE TO elections MODULE
+        if elections == ("Sejm", 2015):
+            self._ScraperClass = Sejm2015Scraper  # pkwscraper.lib.elections.get_classes(elections)["scraper"]
+            self._PreprocessingClass = Sejm2015Preprocessing  # pkwscraper.lib.elections.get_classes(elections)["preprocessing"]
+            self.raw_dir = pkwscraper.lib.scraper.sejm_2015_scraper.RAW_DATA_DIRECTORY
+            self.rescribed_dir = pkwscraper.lib.scraper.sejm_2015_scraper.RESCRIBED_DATA_DIRECTORY
+            self.preprocessed_dir = pkwscraper.lib.scraper.sejm_2015_scraper.PREPROCESSED_DATA_DIRECTORY
+            self.visualized_dir = "./pkwscraper/data/sejm/2015/visualized/"
+        else:
+            raise ValueError("Cannot find analysis for requested elections")
+        # get election specific scraper and preprocessor
+        pass
+
+    def _scrape(self):
+        scraper = self._ScraperClass()
+        scraper.run_all()
+
+    def _preprocess(self):
+        preprocessing = self._PreprocessingClass()
+        preprocessing.run_all()
+
+    def _load_db(self):
+        try:
+            # try opening preprocessed db
+            DbDriver(self.preprocessed_dir, read_only=True)
+        except IOError:
+            try:
+                # preprocessed db cannot be opened, check if there is rescribed db
+                DbDriver(self.rescribed_dir, read_only=True)
+            except IOError:
+                # rescribed db cannot be opened, run downloading and scraping
+                self._scrape()
+            # rescribed db present, run preprocessing
+            self._preprocess()
+        # preprocessed db present, load it
+        self.db = DbDriver(self.preprocessed_dir, read_only=True)
+
+    def _split_db(self):
+        db_refs = DbReferences(self.db)
+
+        # split DB into granularity units
+        if self.granularity == "województwa":
+            pass
+
+        elif self.granularity == "okręgi":
+            pass
+
+        elif self.granularity == "powiaty":
+            pass
+
+        elif self.granularity == "gminy":
+            # do job
+            gminy = self.db[self.granularity].find({})
+
+            for gmina_id, gmina in gminy.items():
+                # get IDs of records
+                powiat_ids = db_refs.gmina_to_powiat(gmina_id)
+                okreg_ids = db_refs.gmina_to_okreg(gmina_id)
+                voivodship_ids = db_refs.gmina_to_voivodship(gmina_id)
+                obwody_ids = db_refs.gmina_to_obwod(gmina_id)
+                protocole_ids = db_refs.gmina_to_protocole(gmina_id)
+                list_ids = db_refs.gmina_to_list(gmina_id)
+                candidate_ids = db_refs.gmina_to_candidate(gmina_id)
+                mandate_ids = db_refs.gmina_to_mandate(gmina_id)
+                wyniki_ids = db_refs.gmina_to_wyniki(gmina_id)
+
+                # create tables
+                db = DbDriver.__new__(DbDriver)
+                db._DbDriver__read_only = False
+                db._DbDriver__tables = {}
+                db._DbDriver__dropped_tables = []
+                db.create_table("województwa")
+                db.create_table("okręgi")
+                db.create_table("powiaty")
+                db.create_table("gminy")
+                db.create_table("obwody")
+                db.create_table("protokoły")
+                db.create_table("mandaty")
+                db.create_table("kandydaci")
+                db.create_table("listy")
+
+                # copy
+                db["gminy"].put(dict(gmina), _id=gmina_id)
+                tables_ids_list = [
+                    ("powiaty", powiat_ids),
+                    ("okręgi", okreg_ids),
+                    ("województwa", voivodship_ids),
+                    ("obwody", obwody_ids),
+                    ("protokoły", protocole_ids),
+                    ("listy", list_ids),
+                    ("kandydaci", candidate_ids),
+                    ("mandaty", mandate_ids)
+                ]
+                for table_name_i, ids_list in tables_ids_list:
+                    for _id in ids_list:
+                        record = self.db[table_name_i][_id]
+                        db[table_name_i].put(dict(record), _id=_id)
+
+                # create and copy results tables
+                for wyniki_table_name, ids_list in wyniki_ids.items():
+                    db.create_table(wyniki_table_name)
+                    for _id in ids_list:
+                        record = self.db[wyniki_table_name][_id]
+                        db[wyniki_table_name].put(dict(record), _id=_id)
+
+                # freeze db and conclude iteration
+                db._DbDriver__read_only = True
+                yield db
+
+    def _visualize(self):
+        # split db into units
+        dbs = self._split_db()
+
+        # process data
+        regions = []
+        values = []
+
+        for db in dbs:
+            # make region
+            geo = db[self.granularity].find_one({}, fields="geo")
+            region = Region.from_json(geo)
+            regions.append(region)
+
+            # evaluate value
+            value = self.function(db)
+            values.append(value)
+
+        # determine outline units
+        outline_geos = self.db[self.outlines_granularity].find({}, fields="geo")
+        outline_regions = [Region.from_json(geo) for geo in outline_geos]
+
+        # make visualizer object
+        self.vis = Visualizer(
+            regions, values, self.colormap, contours=outline_regions,
+            interpolation=self.interpolation, title=self.title,
+            color_legend=self.show_legend, grid=self.show_grid
+        )
+
+        # normalize values if set
+        if self.normalization:
+            self.vis.normalize_values()
+
+        # apply colormap to values
+        self.vis.render_colors()
+
+        # prepare plot
+        self.vis.prepare()
+
+        ### TODO # add title, legend, grid, values, etc.
+
+        # render plot to window or file
+        if self.output_filename:
+            if not os.path.exists(self.visualized_dir):
+                os.makedirs(self.visualized_dir)
+            output_path = self.visualized_dir + self.output_filename
+            self.vis.save_image(output_path)
+        else:
+            self.vis.show()
+
+    def run(self):
+        self._load_db()
+        self._visualize()
+
+    def show_db_schema(self):
+        """ Show tables and fields in DB as user guide. """
+        raise NotImplementedError("TODO")
+        return {tables: {columns: [values_type / enumerating]}}
+        pass
+
+
 class DbReferences:
     @staticmethod
     def inverse_dict(dictionary):
@@ -392,235 +626,3 @@ class DbReferences:
                           for obwod_id in obwody_ids]
             wyniki_dict[table_name_i] = wyniki_ids
         return wyniki_dict
-
-
-class Controller:
-    def __init__(self, elections, function, colormap, granularity,
-                outlines_granularity=None, normalization=True,
-                 title=None, show_legend=False, show_grid=False,
-                 output_filename=None, interpolation='linear'):
-        """
-        output_file - str or None - if None - the result will be
-            displayed in new window
-        """
-        table_names_dict = {
-            "voivodships": "województwa",
-            "constituencies": "okręgi",
-            "districts": "powiaty",
-            "communes": "gminy",
-        }
-        if granularity in table_names_dict:
-            granularity = table_names_dict[granularity]
-        if outlines_granularity in table_names_dict:
-            outlines_granularity = table_names_dict[outlines_granularity]
-
-        # basic correctness checks
-        if granularity not in ["województwa", "okręgi",
-                               "powiaty", "gminy"]:
-            raise ValueError(
-                '`granularity` should be one of: "voivodships", '
-                '"constituencies" or "districts", "communes"')
-
-        if outlines_granularity not in ["województwa", "okręgi",
-                               "powiaty", "gminy"]:
-            raise ValueError(
-                '`outlines_granularity` should be one of: "voivodships", '
-                '"constituencies" or "districts", "communes"')
-
-        self.function = function
-        self.colormap = colormap
-        self.granularity = granularity
-        self.outlines_granularity = outlines_granularity
-        self.normalization = normalization
-        self.title = title
-        self.show_legend = show_legend
-        self.show_grid = show_grid
-        self.output_filename = output_filename
-        self.interpolation = interpolation
-
-        # determine election-specific paths and classes
-        # TODO - MOVE TO elections MODULE
-        if not isinstance(elections, tuple) or len(elections) != 2:
-            raise TypeError("Please, provide elections identifier: (type, year).")
-        body, year = elections
-        if not body in ["Sejm", "Senat", "Europarlament",
-                        "Prezydent", "Samorząd", "Referendum"]:
-            raise ValueError('Please specify the election type from: "Sejm", "Senat", "Europarlament", "Prezydent", "Samorząd" or "Referendum".')
-        try:
-            year = int(year)
-        except (TypeError, ValueError):
-            raise ValueError("Please, provide elections year.")
-        self.elected_body = body
-        self.elections_year = year
-        # get election specific addresses and directories
-        #     directories to: raw/rescribed/preprocessed/visualized
-        #     data - that is the images are 4th stage of data
-        #     processing
-        # TODO - MOVE TO elections MODULE
-        if elections == ("Sejm", 2015):
-            self._ScraperClass = Sejm2015Scraper  # pkwscraper.lib.elections.get_classes(elections)["scraper"]
-            self._PreprocessingClass = Sejm2015Preprocessing  # pkwscraper.lib.elections.get_classes(elections)["preprocessing"]
-            self.raw_dir = pkwscraper.lib.scraper.sejm_2015_scraper.RAW_DATA_DIRECTORY
-            self.rescribed_dir = pkwscraper.lib.scraper.sejm_2015_scraper.RESCRIBED_DATA_DIRECTORY
-            self.preprocessed_dir = pkwscraper.lib.scraper.sejm_2015_scraper.PREPROCESSED_DATA_DIRECTORY
-            self.visualized_dir = "./pkwscraper/data/sejm/2015/visualized/"
-        else:
-            raise ValueError("Cannot find analysis for requested elections")
-        # get election specific scraper and preprocessor
-        pass
-
-    def _scrape(self):
-        scraper = self._ScraperClass()
-        scraper.run_all()
-
-    def _preprocess(self):
-        preprocessing = self._PreprocessingClass()
-        preprocessing.run_all()
-
-    def _load_db(self):
-        try:
-            # try opening preprocessed db
-            DbDriver(self.preprocessed_dir, read_only=True)
-        except IOError:
-            try:
-                # preprocessed db cannot be opened, check if there is rescribed db
-                DbDriver(self.rescribed_dir, read_only=True)
-            except IOError:
-                # rescribed db cannot be opened, run downloading and scraping
-                self._scrape()
-            # rescribed db present, run preprocessing
-            self._preprocess()
-        # preprocessed db present, load it
-        self.db = DbDriver(self.preprocessed_dir, read_only=True)
-
-    def _split_db(self):
-        db_refs = DbReferences(self.db)
-
-        # split DB into granularity units
-        if self.granularity == "województwa":
-            pass
-
-        elif self.granularity == "okręgi":
-            pass
-
-        elif self.granularity == "powiaty":
-            pass
-
-        elif self.granularity == "gminy":
-            # do job
-            gminy = self.db[self.granularity].find({})
-
-            for gmina_id, gmina in gminy.items():
-                # get IDs of records
-                powiat_ids = db_refs.gmina_to_powiat(gmina_id)
-                okreg_ids = db_refs.gmina_to_okreg(gmina_id)
-                voivodship_ids = db_refs.gmina_to_voivodship(gmina_id)
-                obwody_ids = db_refs.gmina_to_obwod(gmina_id)
-                protocole_ids = db_refs.gmina_to_protocole(gmina_id)
-                list_ids = db_refs.gmina_to_list(gmina_id)
-                candidate_ids = db_refs.gmina_to_candidate(gmina_id)
-                mandate_ids = db_refs.gmina_to_mandate(gmina_id)
-                wyniki_ids = db_refs.gmina_to_wyniki(gmina_id)
-
-                # create tables
-                db = DbDriver.__new__(DbDriver)
-                db._DbDriver__read_only = False
-                db._DbDriver__tables = {}
-                db._DbDriver__dropped_tables = []
-                db.create_table("województwa")
-                db.create_table("okręgi")
-                db.create_table("powiaty")
-                db.create_table("gminy")
-                db.create_table("obwody")
-                db.create_table("protokoły")
-                db.create_table("mandaty")
-                db.create_table("kandydaci")
-                db.create_table("listy")
-
-                # copy
-                db["gminy"].put(dict(gmina), _id=gmina_id)
-                tables_ids_list = [
-                    ("powiaty", powiat_ids),
-                    ("okręgi", okreg_ids),
-                    ("województwa", voivodship_ids),
-                    ("obwody", obwody_ids),
-                    ("protokoły", protocole_ids),
-                    ("listy", list_ids),
-                    ("kandydaci", candidate_ids),
-                    ("mandaty", mandate_ids)
-                ]
-                for table_name_i, ids_list in tables_ids_list:
-                    for _id in ids_list:
-                        record = self.db[table_name_i][_id]
-                        db[table_name_i].put(dict(record), _id=_id)
-
-                # create and copy results tables
-                for wyniki_table_name, ids_list in wyniki_ids.items():
-                    db.create_table(wyniki_table_name)
-                    for _id in ids_list:
-                        record = self.db[wyniki_table_name][_id]
-                        db[wyniki_table_name].put(dict(record), _id=_id)
-
-                # freeze db and conclude iteration
-                db._DbDriver__read_only = True
-                yield db
-
-    def _visualize(self):
-        # split db into units
-        dbs = self._split_db()
-
-        # process data
-        regions = []
-        values = []
-
-        for db in dbs:
-            # make region
-            geo = db[self.granularity].find_one({}, fields="geo")
-            region = Region.from_json(geo)
-            regions.append(region)
-
-            # evaluate value
-            value = self.function(db)
-            values.append(value)
-
-        # determine outline units
-        outline_geos = self.db[self.outlines_granularity].find({}, fields="geo")
-        outline_regions = [Region.from_json(geo) for geo in outline_geos]
-
-        # make visualizer object
-        vis = Visualizer(
-            regions, values, self.colormap, contours=outline_regions,
-            interpolation=self.interpolation, title=self.title,
-            color_legend=self.show_legend, grid=self.show_grid
-        )
-
-        # normalize values if set
-        if self.normalization:
-            vis.normalize_values()
-
-        # apply colormap to values
-        vis.render_colors()
-
-        # prepare plot
-        vis.prepare()
-
-        ### TODO # add title, legend, grid, values, etc.
-
-        # render plot to window or file
-        if self.output_filename:
-            if not os.path.exists(self.visualized_dir):
-                os.makedirs(self.visualized_dir)
-            output_path = self.visualized_dir + self.output_filename
-            vis.save_image(output_path)
-        else:
-            vis.show()
-
-    def run(self):
-        self._load_db()
-        self._visualize()
-
-    def show_db_schema(self):
-        """ Show tables and fields in DB as user guide. """
-        raise NotImplementedError("TODO")
-        return {tables: {columns: [values_type / enumerating]}}
-        pass

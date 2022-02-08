@@ -132,6 +132,9 @@ class Colormap:
         #     point to the value of final color - the weights based on
         #     distances are computed. Compose final color as weighted
         #     average.
+        if len(vector) != self._vdim:
+            raise ValueError(f"Wrong len of values vector, got {len(vector)},"
+                             f" should be: {self._vdim}.")
         points = list(self.__data)
         colors = list(self.__data.values())
 
