@@ -4,8 +4,8 @@ import shutil
 from unittest import main, skip, TestCase
 from unittest.mock import call, MagicMock, patch
 
+import numpy as np
 from pandas import DataFrame, Series
-from pandas import np
 
 from pkwscraper.lib.dbdriver import DbDriver, Record, Table
 
@@ -56,9 +56,9 @@ class TestUUID(TestCase):
 class TestRecord(TestCase):
     """
     - test init
-    - test from dict            # TODO
-    - test from dict no id      # TODO
-    - test from df dict item    # TODO
+    - test from dict
+    - test from dict no id
+    - test from df dict item
     - test get id
     - test get field
     - test get item

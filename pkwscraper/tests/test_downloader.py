@@ -50,7 +50,8 @@ class TestDownloader(TestCase):
         local_directory = "/nonexisting/db"
         # act
         with patch("pkwscraper.lib.downloader.os", mock_os):
-            dl = Downloader(2015, local_directory)
+            with patch("pkwscraper.lib.downloader.print"):
+                dl = Downloader(2015, local_directory)
         # assert
         mock_os.path.isdir.assert_called_once_with(local_directory)
         mock_os.makedirs.assert_called_once_with(local_directory, exist_ok=True)
@@ -150,7 +151,8 @@ class TestDownloader(TestCase):
         # act
         with patch("pkwscraper.lib.downloader.os.path.exists", mock_exists):
             with patch("pkwscraper.lib.downloader.requests", mock_requests):
-                file_content = Downloader.download(dl, self.relative_url)
+                with patch("pkwscraper.lib.downloader.print"):
+                    file_content = Downloader.download(dl, self.relative_url)
 
         # assert
         dl._convert_filename.assert_called_once_with(self.relative_url)
@@ -179,8 +181,9 @@ class TestDownloader(TestCase):
         # act
         with patch("pkwscraper.lib.downloader.os.path.exists", mock_exists):
             with patch("pkwscraper.lib.downloader.requests", mock_requests):
-                with self.assertRaises(ConnectionError):
-                    Downloader.download(dl, self.relative_url)
+                with patch("pkwscraper.lib.downloader.print"):
+                    with self.assertRaises(ConnectionError):
+                            Downloader.download(dl, self.relative_url)
 
         # assert
         dl._save_file.assert_not_called()
@@ -205,8 +208,9 @@ class TestDownloader(TestCase):
         # act
         with patch("pkwscraper.lib.downloader.os.path.exists", mock_exists):
             with patch("pkwscraper.lib.downloader.requests", mock_requests):
-                file_content = Downloader.download(
-                    dl, self.relative_url, force=True)
+                with patch("pkwscraper.lib.downloader.print"):
+                    file_content = Downloader.download(
+                            dl, self.relative_url, force=True)
 
         # assert
         mock_requests.get.assert_called_once_with(
@@ -265,13 +269,15 @@ class TestIntegrationDownloader(TestCase):
     def test_download_wrong_file(self):
         dl = Downloader(2015, self.local_directory)
         with self.assertRaises(ConnectionError):
-            result = dl.download(self.fake_rel_path)
+            with patch("pkwscraper.lib.downloader.print"):
+                result = dl.download(self.fake_rel_path)
 
     def test_download(self):
         # arrange
         dl = Downloader(2015, self.local_directory)
         # act
-        result = dl.download(self.rel_path)
+        with patch("pkwscraper.lib.downloader.print"):
+            result = dl.download(self.rel_path)
         # assert
         self.assertIsInstance(result, bytes)
         self.assertGreater(len(result), 100)
@@ -285,7 +291,8 @@ class TestIntegrationDownloader(TestCase):
         result = dl.download(self.rel_path)
         self.assertEqual(result, self.fake_content)
         # check redownload
-        result = dl.download(self.rel_path, force=True)
+        with patch("pkwscraper.lib.downloader.print"):
+            result = dl.download(self.rel_path, force=True)
         self.assertNotEqual(result, self.fake_content)
         self.assertTrue(os.path.exists(self.filepath))
 
