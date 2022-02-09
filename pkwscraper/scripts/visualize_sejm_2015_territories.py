@@ -5,6 +5,7 @@ import json
 import os
 import random
 
+import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.collections import PatchCollection
@@ -259,11 +260,156 @@ class NewTerritoryVisualizer:
         print(f"max too many candidates percentage: {ctrl.vis.maxs[1]}")
         #print(f"max too many candidates absolute: {ctrl.vis.maxs[2]}")
 
+    def visualize_3(self):
+        # define evaluating function
+        def function(db):
+            # get Razem candidates
+            razem_list = db["listy"].find_one(
+                {"committee_shortname": "KW Razem"}, fields="_id")
+            razem_candidates = db["kandydaci"].find({"list": razem_list})
+
+            # get results on polling districts
+            okreg_no = db["okręgi"].find_one({}, fields="number")
+            wyniki_tablename = f"wyniki_{okreg_no}"
+            wyniki = db[wyniki_tablename].find({})
+            obwod_to_protocole = {
+                obwod_id: protocole_id
+                for protocole_id, obwod_id
+                in db["protokoły"].find({}, fields=["_id", "obwod"])
+            }
+
+            # sum of votes
+            n_obwody = len(wyniki)
+            total_votes_valid = 0
+            total_votes_razem = 0
+            obwody_percents_razem = []
+
+            # iterate over results in polling districts
+            for wyniki_id, wyniki_record in wyniki.items():
+                obwod_id = wyniki_record["obwod"]
+                protocole_id = obwod_to_protocole[obwod_id]
+                votes_valid = db["protokoły"][protocole_id]["votes_valid"]
+                if votes_valid == 0:
+                    continue
+                total_votes_valid += votes_valid
+
+                votes_razem = 0
+                for candidate_id, votes in wyniki_record.items():
+                    if candidate_id in ["_id", "obwod", "candidates_count"]:
+                        continue
+                    if candidate_id in razem_candidates:
+                        votes_razem += votes
+
+                total_votes_razem += votes_razem
+                obwody_percents_razem.append(votes_razem / votes_valid)
+
+            # process results
+            total_percent_razem = total_votes_razem / total_votes_valid
+            mean_percent_razem = sum(obwody_percents_razem) / n_obwody
+
+            # Let's see what is the relation of mean percentage to
+            # the total percentage. This can differ because varying
+            # size of polling districts. If the mean percentage is greater
+            # than total percentage - that means, that Razem got better
+            # result in smaller polling districts. If mean percentage is
+            # smaller than total percentage - bigger polling districts
+            # favoured Razem.
+            #
+            # Summing up:
+            # - ratio > 1.0: Razem is preferred by bigger polling districts
+            # - ratio < 1.0: Razem is preferred by smaller polling districts
+            return total_percent_razem / mean_percent_razem - 0.5
+
+        # define colormap
+        colormap = Colormap("seismic")
+
+        # run controller
+        ctrl = Controller(
+            ("Sejm", 2015), function, colormap, granularity="województwa",
+            outlines_granularity="województwa", normalization=False,
+            output_filename="razem_polling_district_size_prefference.png"
+        )
+        ctrl.run()
+
+    def visualize_4(self):
+        # define evaluating function
+        def function(db):
+            # get Razem candidates
+            razem_list = db["listy"].find_one(
+                {"committee_shortname": "KW Razem"}, fields="_id")
+            razem_candidates = db["kandydaci"].find({"list": razem_list})
+
+            # get results on polling districts
+            okreg_no = db["okręgi"].find_one({}, fields="number")
+            wyniki_tablename = f"wyniki_{okreg_no}"
+            wyniki = db[wyniki_tablename].find({})
+            obwod_to_protocole = {
+                obwod_id: protocole_id
+                for protocole_id, obwod_id
+                in db["protokoły"].find({}, fields=["_id", "obwod"])
+            }
+
+            # sum of votes
+            n_obwody = len(wyniki)
+            total_votes_valid = 0
+            total_votes_razem = 0
+            obwody_percents_razem = []
+
+            # iterate over results in polling districts
+            for wyniki_id, wyniki_record in wyniki.items():
+                obwod_id = wyniki_record["obwod"]
+                protocole_id = obwod_to_protocole[obwod_id]
+                votes_valid = db["protokoły"][protocole_id]["votes_valid"]
+                if votes_valid == 0:
+                    continue
+                total_votes_valid += votes_valid
+
+                votes_razem = 0
+                for candidate_id, votes in wyniki_record.items():
+                    if candidate_id in ["_id", "obwod", "candidates_count"]:
+                        continue
+                    if candidate_id in razem_candidates:
+                        votes_razem += votes
+
+                total_votes_razem += votes_razem
+                obwody_percents_razem.append(votes_razem / votes_valid)
+
+            # calculate standard deviations (STD) of votes
+            average_votes_razem = total_votes_razem / n_obwody
+            average_votes_valid = total_votes_valid / n_obwody
+            expected_votes_std = average_votes_razem ** 0.5
+            expected_percent_std = expected_votes_std / average_votes_valid
+            real_percent_std = np.std(obwody_percents_razem)
+
+            # Let's see what is the dispersion of Razem results compared
+            # to expected value. Bigger dispersion can mean that population
+            # is more divided geographically. Smaller dispersion can mean
+            # the population is more uniform geographically.
+            #
+            # Summing up:
+            # - ratio > 1.0: Razem result varies
+            # - ratio < 1.0: Razem result is uniform
+            return real_percent_std / expected_percent_std - 1.5
+
+        # define colormap
+        colormap = Colormap("seismic")
+
+        for gran in ["województwa", "okręgi", "powiaty", "gminy"]:
+            # run controller
+            ctrl = Controller(
+                ("Sejm", 2015), function, colormap, granularity=gran,
+                outlines_granularity="województwa", normalization=True,
+                output_filename=f"razem_deviation_difference_{gran}.png"
+            )
+            ctrl.run()
+
 
 if __name__ == "__main__":
     new_ter_vis = NewTerritoryVisualizer()
-    new_ter_vis.visualize_2a()
+    new_ter_vis.visualize_4()
+    #new_ter_vis.visualize_3()
+    #new_ter_vis.visualize_2a()
 
-    ter_vis = TerritoryVisualizer()
-    ter_vis.visualize()
-    ter_vis.visualize_2()
+    #ter_vis = TerritoryVisualizer()
+    #ter_vis.visualize()
+    #ter_vis.visualize_2()

@@ -141,13 +141,181 @@ class Controller:
 
         # split DB into granularity units
         if self.granularity == "województwa":
-            pass
+            # do job
+            voivodships = self.db[self.granularity].find({})
+
+            for voivodship_id, voivodship in voivodships.items():
+                # get IDs of records
+                gmina_ids = db_refs.voivodship_to_gmina(voivodship_id)
+                powiat_ids = db_refs.voivodship_to_powiat(voivodship_id)
+                okreg_ids = db_refs.voivodship_to_okreg(voivodship_id)
+                obwody_ids = db_refs.voivodship_to_obwod(voivodship_id)
+                protocole_ids = db_refs.voivodship_to_protocole(voivodship_id)
+                list_ids = db_refs.voivodship_to_list(voivodship_id)
+                candidate_ids = db_refs.voivodship_to_candidate(voivodship_id)
+                mandate_ids = db_refs.voivodship_to_mandate(voivodship_id)
+                wyniki_ids = db_refs.voivodship_to_wyniki(voivodship_id)
+
+                # create tables
+                db = DbDriver.__new__(DbDriver)
+                db._DbDriver__read_only = False
+                db._DbDriver__tables = {}
+                db._DbDriver__dropped_tables = []
+                db.create_table("województwa")
+                db.create_table("okręgi")
+                db.create_table("powiaty")
+                db.create_table("gminy")
+                db.create_table("obwody")
+                db.create_table("protokoły")
+                db.create_table("mandaty")
+                db.create_table("kandydaci")
+                db.create_table("listy")
+
+                # copy
+                db["województwa"].put(dict(voivodship), _id=voivodship_id)
+                tables_ids_list = [
+                    ("gminy", gmina_ids),
+                    ("powiaty", powiat_ids),
+                    ("okręgi", okreg_ids),
+                    ("obwody", obwody_ids),
+                    ("protokoły", protocole_ids),
+                    ("listy", list_ids),
+                    ("kandydaci", candidate_ids),
+                    ("mandaty", mandate_ids)
+                ]
+                for table_name_i, ids_list in tables_ids_list:
+                    for _id in ids_list:
+                        record = self.db[table_name_i][_id]
+                        db[table_name_i].put(dict(record), _id=_id)
+
+                # create and copy results tables
+                for wyniki_table_name, ids_list in wyniki_ids.items():
+                    db.create_table(wyniki_table_name)
+                    for _id in ids_list:
+                        record = self.db[wyniki_table_name][_id]
+                        db[wyniki_table_name].put(dict(record), _id=_id)
+
+                # freeze db and conclude iteration
+                db._DbDriver__read_only = True
+                yield db
 
         elif self.granularity == "okręgi":
-            pass
+            # do job
+            okregi = self.db[self.granularity].find({})
+
+            for okreg_id, okreg in okregi.items():
+                # get IDs of records
+                gmina_ids = db_refs.okreg_to_gmina(okreg_id)
+                powiat_ids = db_refs.okreg_to_powiat(okreg_id)
+                voivodship_ids = db_refs.okreg_to_voivodship(okreg_id)
+                obwody_ids = db_refs.okreg_to_obwod(okreg_id)
+                protocole_ids = db_refs.okreg_to_protocole(okreg_id)
+                list_ids = db_refs.okreg_to_list(okreg_id)
+                candidate_ids = db_refs.okreg_to_candidate(okreg_id)
+                mandate_ids = db_refs.okreg_to_mandate(okreg_id)
+                wyniki_ids = db_refs.okreg_to_wyniki(okreg_id)
+
+                # create tables
+                db = DbDriver.__new__(DbDriver)
+                db._DbDriver__read_only = False
+                db._DbDriver__tables = {}
+                db._DbDriver__dropped_tables = []
+                db.create_table("województwa")
+                db.create_table("okręgi")
+                db.create_table("powiaty")
+                db.create_table("gminy")
+                db.create_table("obwody")
+                db.create_table("protokoły")
+                db.create_table("mandaty")
+                db.create_table("kandydaci")
+                db.create_table("listy")
+
+                # copy
+                db["okręgi"].put(dict(okreg), _id=okreg_id)
+                tables_ids_list = [
+                    ("gminy", gmina_ids),
+                    ("powiaty", powiat_ids),
+                    ("województwa", voivodship_ids),
+                    ("obwody", obwody_ids),
+                    ("protokoły", protocole_ids),
+                    ("listy", list_ids),
+                    ("kandydaci", candidate_ids),
+                    ("mandaty", mandate_ids)
+                ]
+                for table_name_i, ids_list in tables_ids_list:
+                    for _id in ids_list:
+                        record = self.db[table_name_i][_id]
+                        db[table_name_i].put(dict(record), _id=_id)
+
+                # create and copy results tables
+                for wyniki_table_name, ids_list in wyniki_ids.items():
+                    db.create_table(wyniki_table_name)
+                    for _id in ids_list:
+                        record = self.db[wyniki_table_name][_id]
+                        db[wyniki_table_name].put(dict(record), _id=_id)
+
+                # freeze db and conclude iteration
+                db._DbDriver__read_only = True
+                yield db
 
         elif self.granularity == "powiaty":
-            pass
+            # do job
+            powiaty = self.db[self.granularity].find({})
+
+            for powiat_id, powiat in powiaty.items():
+                # get IDs of records
+                gmina_ids = db_refs.powiat_to_gmina(powiat_id)
+                okreg_ids = db_refs.powiat_to_okreg(powiat_id)
+                voivodship_ids = db_refs.powiat_to_voivodship(powiat_id)
+                obwody_ids = db_refs.powiat_to_obwod(powiat_id)
+                protocole_ids = db_refs.powiat_to_protocole(powiat_id)
+                list_ids = db_refs.powiat_to_list(powiat_id)
+                candidate_ids = db_refs.powiat_to_candidate(powiat_id)
+                mandate_ids = db_refs.powiat_to_mandate(powiat_id)
+                wyniki_ids = db_refs.powiat_to_wyniki(powiat_id)
+
+                # create tables
+                db = DbDriver.__new__(DbDriver)
+                db._DbDriver__read_only = False
+                db._DbDriver__tables = {}
+                db._DbDriver__dropped_tables = []
+                db.create_table("województwa")
+                db.create_table("okręgi")
+                db.create_table("powiaty")
+                db.create_table("gminy")
+                db.create_table("obwody")
+                db.create_table("protokoły")
+                db.create_table("mandaty")
+                db.create_table("kandydaci")
+                db.create_table("listy")
+
+                # copy
+                db["powiaty"].put(dict(powiat), _id=powiat_id)
+                tables_ids_list = [
+                    ("gminy", gmina_ids),
+                    ("okręgi", okreg_ids),
+                    ("województwa", voivodship_ids),
+                    ("obwody", obwody_ids),
+                    ("protokoły", protocole_ids),
+                    ("listy", list_ids),
+                    ("kandydaci", candidate_ids),
+                    ("mandaty", mandate_ids)
+                ]
+                for table_name_i, ids_list in tables_ids_list:
+                    for _id in ids_list:
+                        record = self.db[table_name_i][_id]
+                        db[table_name_i].put(dict(record), _id=_id)
+
+                # create and copy results tables
+                for wyniki_table_name, ids_list in wyniki_ids.items():
+                    db.create_table(wyniki_table_name)
+                    for _id in ids_list:
+                        record = self.db[wyniki_table_name][_id]
+                        db[wyniki_table_name].put(dict(record), _id=_id)
+
+                # freeze db and conclude iteration
+                db._DbDriver__read_only = True
+                yield db
 
         elif self.granularity == "gminy":
             # do job
@@ -618,10 +786,10 @@ class DbReferences:
 
     def voivodship_to_wyniki(self, voivodship_id):
         wyniki_dict = {}
-        okregi_ids = self._voivodship_to_okreg[powiat_id]
+        okregi_ids = self._voivodship_to_okreg[voivodship_id]
         for okreg_id in okregi_ids:
             table_name_i = self._wyniki_table_names[okreg_id]
-            obwody_ids = self._okreg_to_obwod[powiat_id]
+            obwody_ids = self._okreg_to_obwod[okreg_id]
             wyniki_ids = [self._obwod_to_wyniki[obwod_id]
                           for obwod_id in obwody_ids]
             wyniki_dict[table_name_i] = wyniki_ids

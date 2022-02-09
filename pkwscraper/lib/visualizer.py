@@ -268,6 +268,11 @@ class Visualizer:
     def normalize_values(self):
         """ Scale values of all individual units to fit desired range. """
         # prepare data
+        ###############################################
+        ###############################################
+        ############### TODO - MAYBE MOVE IT TO INIT (DO ALWAYS)
+        ###############################################
+        ###############################################
         values = np.array(self.values, dtype=float)
         mins = np.amin(values, axis=0)
         maxs = np.amax(values, axis=0)
