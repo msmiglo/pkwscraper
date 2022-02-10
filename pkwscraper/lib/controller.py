@@ -440,8 +440,16 @@ class Controller:
 class DbReferences:
     @staticmethod
     def inverse_dict(dictionary):
-        # TODO
-        pass
+        values = []
+        for value_list in dictionary.values():
+            values += value_list
+
+        inversed_dict = {value: [] for value in values}
+        for key, value_list in dictionary.items():
+            for value in value_list:
+                inversed_dict[value].append(key)
+
+        return inversed_dict
 
     def __init__(self, db, granularity=None):
         # TODO - GRANULARITY
@@ -466,7 +474,7 @@ class DbReferences:
         """
         print("Creating indexes for data...")
 
-        # direct indexes
+        # list of names
         self._voivodships = db["województwa"].find({}, fields="_id")
         self._wyniki_table_names = {
             okreg_id: f"wyniki_{okreg_no}"
@@ -474,6 +482,7 @@ class DbReferences:
             in db["okręgi"].find({}, fields=["_id", "number"])
         }
 
+        # direct indexes
         self._gmina_to_powiat = {
             gmina_id: [powiat_id]
             for gmina_id, powiat_id
@@ -491,11 +500,7 @@ class DbReferences:
             for okreg_id, powiaty
             in db["okręgi"].find({}, fields=["_id", "powiat_list"])}
 
-        self._powiat_to_okreg = {
-            powiat_id: [okreg_id]
-            for okreg_id, powiat_list in self._okreg_to_powiat.items()
-            for powiat_id in powiat_list
-        }
+        self._powiat_to_okreg = self.inverse_dict(self._okreg_to_powiat)
 
         self._gmina_to_okreg = {}
         for gmina_id in self._gmina_to_powiat.keys():
@@ -515,45 +520,16 @@ class DbReferences:
             voivodship_id = self._powiat_to_voivodship[powiat_id][0]
             self._okreg_to_voivodship[okreg_id] = [voivodship_id]
 
-        self._powiat_to_gmina = {
-            powiat_id: [] for powiat_id
-            in self._powiat_to_voivodship.keys()
-        }
-        for gmina_id, powiaty in self._gmina_to_powiat.items():
-            powiat_id = powiaty[0]
-            self._powiat_to_gmina[powiat_id].append(gmina_id)
+        self._powiat_to_gmina = self.inverse_dict(self._gmina_to_powiat)
 
-        self._okreg_to_gmina = {
-            okreg_id: [] for okreg_id
-            in self._okreg_to_powiat.keys()
-        }
-        for gmina_id, okregi in self._gmina_to_okreg.items():
-            okreg_id = okregi[0]
-            self._okreg_to_gmina[okreg_id].append(gmina_id)
+        self._okreg_to_gmina = self.inverse_dict(self._gmina_to_okreg)
 
-        self._voivodship_to_gmina = {
-            voivodship_id: [] for voivodship_id
-            in self._voivodships
-        }
-        for gmina_id, voivodship_list in self._gmina_to_voivodship.items():
-            voivodship_id = voivodship_list[0]
-            self._voivodship_to_gmina[voivodship_id].append(gmina_id)
+        self._voivodship_to_gmina = self.inverse_dict(self._gmina_to_voivodship)
 
-        self._voivodship_to_powiat = {
-            voivodship_id: [] for voivodship_id
-            in self._voivodships
-        }
-        for powiat_id, voivodship_list in self._powiat_to_voivodship.items():
-            voivodship_id = voivodship_list[0]
-            self._voivodship_to_powiat[voivodship_id].append(powiat_id)
+        self._voivodship_to_powiat = self.inverse_dict(
+            self._powiat_to_voivodship)
 
-        self._voivodship_to_okreg = {
-            voivodship_id: [] for voivodship_id
-            in self._voivodships
-        }
-        for okreg_id, voivodship_list in self._okreg_to_voivodship.items():
-            voivodship_id = voivodship_list[0]
-            self._voivodship_to_okreg[voivodship_id].append(okreg_id)
+        self._voivodship_to_okreg = self.inverse_dict(self._okreg_to_voivodship)
 
         self._gmina_to_obwod = {
             gmina_id: [] for gmina_id in self._gmina_to_powiat.keys()}

@@ -122,6 +122,7 @@ class TestColormap(TestCase):
         # arrange
         cm = Colormap.__new__(Colormap)
         cm._Colormap__data = self.color_data_2d
+        cm._vdim = 2
         # act
         color_1 = cm._nd_interpolate((0.3, 0.8))
         color_2 = cm._nd_interpolate((0.0, 1.0))
