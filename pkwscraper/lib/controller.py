@@ -41,12 +41,7 @@ class Controller:
         output_file - str or None - if None - the result will be
             displayed in new window
         """
-        table_names_dict = {
-            "voivodships": "województwa",
-            "constituencies": "okręgi",
-            "districts": "powiaty",
-            "communes": "gminy",
-        }
+        # translate English variants of arguments
         if granularity in GRANULARITY_DICT:
             granularity = GRANULARITY_DICT[granularity]
         if outlines_granularity in GRANULARITY_DICT:
@@ -63,6 +58,12 @@ class Controller:
                 '`outlines_granularity` should be one of: "voivodships", '
                 '"constituencies" or "districts", "communes"')
 
+        if not isinstance(elections, tuple) or len(elections) != 2:
+            raise TypeError("Please, provide elections identifier: (type, year).")
+
+        # assing arguments
+        elections_type, year = elections
+        self.elections = Elections(elections_type=elections_type, year=year)
         self.function = function
         self.colormap = colormap
         self.granularity = granularity
@@ -76,36 +77,31 @@ class Controller:
         self.vis = None
         self.source_db = None
 
-        # determine election-specific paths and classes
-        # TODO - MOVE TO elections MODULE
-        if not isinstance(elections, tuple) or len(elections) != 2:
-            raise TypeError("Please, provide elections identifier: (type, year).")
-        body, year = elections
-        self.elections = Elections(election_type=body, year=year)
-
     def _scrape(self):
-        scraper = self._ScraperClass()
+        _ScraperClass = self.elections.get_scraper_class()
+        scraper = _ScraperClass()
         scraper.run_all()
 
     def _preprocess(self):
-        preprocessing = self._PreprocessingClass()
+        _PreprocessingClass = self.elections.get_preprocessing_class()
+        preprocessing = _PreprocessingClass()
         preprocessing.run_all()
 
     def _load_db(self):
         try:
             # try opening preprocessed db
-            DbDriver(self.preprocessed_dir, read_only=True)
+            DbDriver(self.elections.preprocessed_dir, read_only=True)
         except IOError:
             try:
                 # preprocessed db cannot be opened, check if there is rescribed db
-                DbDriver(self.rescribed_dir, read_only=True)
+                DbDriver(self.elections.rescribed_dir, read_only=True)
             except IOError:
                 # rescribed db cannot be opened, run downloading and scraping
                 self._scrape()
             # rescribed db present, run preprocessing
             self._preprocess()
         # preprocessed db present, load it
-        self.source_db = DbDriver(self.preprocessed_dir, read_only=True)
+        self.source_db = DbDriver(self.elections.preprocessed_dir, read_only=True)
 
     def _split_db(self):
         units = self.source_db[self.granularity].find({})
@@ -197,9 +193,11 @@ class Controller:
 
         # render plot to window or file
         if self.output_filename:
-            if not os.path.exists(self.visualized_dir):
-                os.makedirs(self.visualized_dir)
-            output_path = self.visualized_dir + self.output_filename
+            visualized_dir = self.elections.visualized_dir
+            if not os.path.exists(visualized_dir):
+                ### TODO - make image dir, not only main dir
+                os.makedirs(visualized_dir)
+            output_path = visualized_dir + self.output_filename
             self.vis.save_image(output_path)
         else:
             self.vis.show()
