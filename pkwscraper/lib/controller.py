@@ -2,19 +2,8 @@
 import json
 import os
 
-import pkwscraper.lib.elections
-import pkwscraper.lib.scraper.sejm_2015_scraper
-from pkwscraper.lib.scraper.sejm_2015_scraper import Sejm2015Scraper
-from pkwscraper.lib.preprocessing.sejm_2015_preprocessing import \
-     Sejm2015Preprocessing
-'''from pkwscraper.lib.scraper.sejm_2019_scraper import Sejm2019Scraper
-from pkwscraper.lib.scraper.sejm_2023_scraper import Sejm2023Scraper
-from pkwscraper.lib.preprocessing.sejm_2019_preprocessing import \
-     Sejm2019Preprocessing
-from pkwscraper.lib.preprocessing.sejm_2023_preprocessing import \
-     Sejm2023Preprocessing'''
-
 from pkwscraper.lib.dbdriver import DbDriver
+from pkwscraper.lib.elections import Elections
 from pkwscraper.lib.region import Region
 from pkwscraper.lib.visualizer import Visualizer
 
@@ -92,31 +81,7 @@ class Controller:
         if not isinstance(elections, tuple) or len(elections) != 2:
             raise TypeError("Please, provide elections identifier: (type, year).")
         body, year = elections
-        if not body in ["Sejm", "Senat", "Europarlament",
-                        "Prezydent", "Samorząd", "Referendum"]:
-            raise ValueError('Please specify the election type from: "Sejm", "Senat", "Europarlament", "Prezydent", "Samorząd" or "Referendum".')
-        try:
-            year = int(year)
-        except (TypeError, ValueError):
-            raise ValueError("Please, provide elections year.")
-        self.elected_body = body
-        self.elections_year = year
-        # get election specific addresses and directories
-        #     directories to: raw/rescribed/preprocessed/visualized
-        #     data - that is the images are 4th stage of data
-        #     processing
-        # TODO - MOVE TO elections MODULE
-        if elections == ("Sejm", 2015):
-            self._ScraperClass = Sejm2015Scraper  # pkwscraper.lib.elections.get_classes(elections)["scraper"]
-            self._PreprocessingClass = Sejm2015Preprocessing  # pkwscraper.lib.elections.get_classes(elections)["preprocessing"]
-            self.raw_dir = pkwscraper.lib.scraper.sejm_2015_scraper.RAW_DATA_DIRECTORY
-            self.rescribed_dir = pkwscraper.lib.scraper.sejm_2015_scraper.RESCRIBED_DATA_DIRECTORY
-            self.preprocessed_dir = pkwscraper.lib.scraper.sejm_2015_scraper.PREPROCESSED_DATA_DIRECTORY
-            self.visualized_dir = "./pkwscraper/data/sejm/2015/visualized/"
-        else:
-            raise ValueError("Cannot find analysis for requested elections")
-        # get election specific scraper and preprocessor
-        pass
+        self.elections = Elections(election_type=body, year=year)
 
     def _scrape(self):
         scraper = self._ScraperClass()
@@ -143,13 +108,11 @@ class Controller:
         self.source_db = DbDriver(self.preprocessed_dir, read_only=True)
 
     def _split_db(self):
+        units = self.source_db[self.granularity].find({})
         db_refs = DbReferences(self.source_db, self.granularity)
 
-        # split DB into granularity units
-        units = self.source_db[self.granularity].find({})
-
         for unit_id in units:
-            # get IDs of records
+            # get IDs of records in tables
             gmina_ids = db_refs.get_gmina(unit_id)
             powiat_ids = db_refs.get_powiat(unit_id)
             okreg_ids = db_refs.get_okreg(unit_id)
@@ -161,13 +124,6 @@ class Controller:
             mandate_ids = db_refs.get_mandate(unit_id)
             wyniki_ids = db_refs.get_wyniki(unit_id)
 
-            # create tables
-            db = DbDriver.__new__(DbDriver)
-            db._DbDriver__read_only = False
-            db._DbDriver__tables = {}
-            db._DbDriver__dropped_tables = []
-
-            # copy
             tables_and_ids = {
                 "gminy": gmina_ids,
                 "powiaty": powiat_ids,
@@ -181,6 +137,13 @@ class Controller:
             }
             tables_and_ids.update(wyniki_ids)
 
+            # create db driver instance
+            db = DbDriver.__new__(DbDriver)
+            db._DbDriver__read_only = False
+            db._DbDriver__tables = {}
+            db._DbDriver__dropped_tables = []
+
+            # copy records
             for table_name, ids_list in tables_and_ids.items():
                 db.create_table(table_name)
                 for _id in ids_list:
