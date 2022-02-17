@@ -2,31 +2,21 @@
 import json
 import os
 
-import pkwscraper.lib.elections
-import pkwscraper.lib.scraper.sejm_2015_scraper
-from pkwscraper.lib.scraper.sejm_2015_scraper import Sejm2015Scraper
-from pkwscraper.lib.preprocessing.sejm_2015_preprocessing import \
-     Sejm2015Preprocessing
-'''from pkwscraper.lib.scraper.sejm_2019_scraper import Sejm2019Scraper
-from pkwscraper.lib.scraper.sejm_2023_scraper import Sejm2023Scraper
-from pkwscraper.lib.preprocessing.sejm_2019_preprocessing import \
-     Sejm2019Preprocessing
-from pkwscraper.lib.preprocessing.sejm_2023_preprocessing import \
-     Sejm2023Preprocessing'''
-
 from pkwscraper.lib.dbdriver import DbDriver
+from pkwscraper.lib.elections import Elections
 from pkwscraper.lib.region import Region
 from pkwscraper.lib.visualizer import Visualizer
 
 """
-Concepts dictionary explained:
+Concepts explained:
 
-- user function - the function passed to class that takes data for
-    single territorial unit and returns a value or vector of values;
+- user function / function - the function passed to Controller that
+    takes data for single territorial unit and returns a value or vector
+    of values;
 - granularity - level of territorial units at which data will be split
     before passing to the function;
 - downloading and scraping - first stage of data processing - obtaining
-    raw data from internet, it includes rescribing to db tables;
+    raw data from internet, it includes rescribing to DB tables;
 - preprocessing - cleaning rescribed data, making them ready to use
     by visualizing step;
 - visualizing - taking preprocessed data and making plots with it;
@@ -35,42 +25,101 @@ Concepts dictionary explained:
 """
 
 
+GRANULARITY_DICT = {
+    "voivodships": "województwa",
+    "constituencies": "okręgi",
+    "districts": "powiaty",
+    "communes": "gminy",
+}
+
+
 class Controller:
+    """
+    This is the main class of the project, that calls all steps
+    of data processing. This is created by passing main parameters
+    and, most importantly, evaluating function. This renders a plot
+    to image or for showing in separate window.
+    """
     def __init__(self, elections, function, colormap, granularity,
-                outlines_granularity=None, normalization=True,
-                 title=None, show_legend=False, show_grid=False,
-                 output_filename=None, interpolation='linear'):
+                 unit=None, outlines_granularity=None,
+                 normalization=True, title=None, show_legend=False,
+                 show_grid=False, output_filename=None,
+                 interpolation='linear'):
         """
-        output_file - str or None - if None - the result will be
-            displayed in new window
+        Constructor does basic checks and creates class attributes.
+
+        elections: (str, int) - type and year (unambiguous identifier)
+            of elections,
+        function: callable - function to evaluate data for single unit,
+        colormap: callable - function or object that converts numerical
+            values returned by function to proper colors,
+        granularity: str - the level of territorial units that plot
+            will be split into,
+        unit: (str, ID) or None - the unit to which analysis will be
+            limited; it is the pair of name of granularity, and then
+            the ID of specific unit (that means it has to be determined
+            earlier outside the class); if None - the plot is made for
+            the whole country,
+        outlines_granularity - level of territorial units that borders
+            will be placed on top of plot as contours,
+        normalization: bool - whether or not values from all units
+            should be scaled to (0,1) range before passing to colormap,
+        title: str - title of plot that is placed over the plot,
+        show_legend: bool - whether or not to show the color key in
+            form of legend, can contain extreme values written next
+            to it,
+        show_grid: bool - whether or not to show the frame around
+            the units plot,
+        output_filename: str or None - if None - the result will be
+            displayed in new window, otherwise, it will be rendered to
+            image file saved to given filenam in default visualizing
+            directory,
+        interpolation: str - method of interpolation of colors in the
+            colormap.
         """
-        table_names_dict = {
-            "voivodships": "województwa",
-            "constituencies": "okręgi",
-            "districts": "powiaty",
-            "communes": "gminy",
-        }
-        if granularity in table_names_dict:
-            granularity = table_names_dict[granularity]
-        if outlines_granularity in table_names_dict:
-            outlines_granularity = table_names_dict[outlines_granularity]
+        # unpack unit
+        if unit is None:
+            unit_granularity = None
+            unit_id = None
+        else:
+            unit_granularity, unit_id = unit
+
+        # translate English variants of arguments
+        if granularity in GRANULARITY_DICT:
+            granularity = GRANULARITY_DICT[granularity]
+        if outlines_granularity in GRANULARITY_DICT:
+            outlines_granularity = GRANULARITY_DICT[outlines_granularity]
+        if unit_granularity in GRANULARITY_DICT:
+            unit_granularity = GRANULARITY_DICT[unit_granularity]
 
         # basic correctness checks
-        if granularity not in ["województwa", "okręgi",
-                               "powiaty", "gminy"]:
+        if granularity not in GRANULARITY_DICT.values():
             raise ValueError(
                 '`granularity` should be one of: "voivodships", '
-                '"constituencies" or "districts", "communes"')
+                '"constituencies", "districts" or "communes"')
 
-        if outlines_granularity not in ["województwa", "okręgi",
-                               "powiaty", "gminy"]:
+        if outlines_granularity not in GRANULARITY_DICT.values():
             raise ValueError(
                 '`outlines_granularity` should be one of: "voivodships", '
-                '"constituencies" or "districts", "communes"')
+                '"constituencies", "districts" or "communes"')
 
+        if unit_granularity is not None \
+           and unit_granularity not in GRANULARITY_DICT.values():
+            raise ValueError(
+                '`unit` first part should be one of: "voivodships", '
+                '"constituencies", "districts" or "communes"')
+
+        if not isinstance(elections, tuple) or len(elections) != 2:
+            raise TypeError("Please, provide elections identifier: (type, year).")
+
+        # assing arguments
+        elections_type, year = elections
+        self.elections = Elections(elections_type=elections_type, year=year)
         self.function = function
         self.colormap = colormap
         self.granularity = granularity
+        self.unit_granularity = unit_granularity
+        self.unit_id = unit_id
         self.outlines_granularity = outlines_granularity
         self.normalization = normalization
         self.title = title
@@ -79,134 +128,99 @@ class Controller:
         self.output_filename = output_filename
         self.interpolation = interpolation
         self.vis = None
-        self.db = None
-
-        # determine election-specific paths and classes
-        # TODO - MOVE TO elections MODULE
-        if not isinstance(elections, tuple) or len(elections) != 2:
-            raise TypeError("Please, provide elections identifier: (type, year).")
-        body, year = elections
-        if not body in ["Sejm", "Senat", "Europarlament",
-                        "Prezydent", "Samorząd", "Referendum"]:
-            raise ValueError('Please specify the election type from: "Sejm", "Senat", "Europarlament", "Prezydent", "Samorząd" or "Referendum".')
-        try:
-            year = int(year)
-        except (TypeError, ValueError):
-            raise ValueError("Please, provide elections year.")
-        self.elected_body = body
-        self.elections_year = year
-        # get election specific addresses and directories
-        #     directories to: raw/rescribed/preprocessed/visualized
-        #     data - that is the images are 4th stage of data
-        #     processing
-        # TODO - MOVE TO elections MODULE
-        if elections == ("Sejm", 2015):
-            self._ScraperClass = Sejm2015Scraper  # pkwscraper.lib.elections.get_classes(elections)["scraper"]
-            self._PreprocessingClass = Sejm2015Preprocessing  # pkwscraper.lib.elections.get_classes(elections)["preprocessing"]
-            self.raw_dir = pkwscraper.lib.scraper.sejm_2015_scraper.RAW_DATA_DIRECTORY
-            self.rescribed_dir = pkwscraper.lib.scraper.sejm_2015_scraper.RESCRIBED_DATA_DIRECTORY
-            self.preprocessed_dir = pkwscraper.lib.scraper.sejm_2015_scraper.PREPROCESSED_DATA_DIRECTORY
-            self.visualized_dir = "./pkwscraper/data/sejm/2015/visualized/"
-        else:
-            raise ValueError("Cannot find analysis for requested elections")
-        # get election specific scraper and preprocessor
-        pass
+        self.source_db = None
 
     def _scrape(self):
-        scraper = self._ScraperClass()
+        _ScraperClass = self.elections.get_scraper_class()
+        scraper = _ScraperClass()
         scraper.run_all()
 
     def _preprocess(self):
-        preprocessing = self._PreprocessingClass()
+        _PreprocessingClass = self.elections.get_preprocessing_class()
+        preprocessing = _PreprocessingClass()
         preprocessing.run_all()
 
     def _load_db(self):
         try:
             # try opening preprocessed db
-            DbDriver(self.preprocessed_dir, read_only=True)
+            DbDriver(self.elections.preprocessed_dir, read_only=True)
         except IOError:
             try:
                 # preprocessed db cannot be opened, check if there is rescribed db
-                DbDriver(self.rescribed_dir, read_only=True)
+                DbDriver(self.elections.rescribed_dir, read_only=True)
             except IOError:
                 # rescribed db cannot be opened, run downloading and scraping
                 self._scrape()
             # rescribed db present, run preprocessing
             self._preprocess()
         # preprocessed db present, load it
-        self.db = DbDriver(self.preprocessed_dir, read_only=True)
+        self.source_db = DbDriver(self.elections.preprocessed_dir, read_only=True)
 
     def _split_db(self):
-        db_refs = DbReferences(self.db)
+        """
+        This is used to split data in DB to correspond only to the
+        single unit of analysis. Function passed by user can use all
+        the DB instance data given to it, and be sure that they are
+        isolated from data corresponding to other units.
+        """
+        # prepare indexes
+        db_refs = DbReferences(self.source_db, self.granularity)
 
-        # split DB into granularity units
-        if self.granularity == "województwa":
-            pass
+        # prepare units list
+        if self.unit_granularity is None:
+            units = self.source_db[self.granularity].find({})
+        else:
+            # check if unit is correctly set
+            self.source_db[self.unit_granularity][self.unit_id]
+            units = db_refs.get_relation(
+                _from=self.unit_granularity,
+                _to=self.granularity,
+                _id=self.unit_id,
+            )
 
-        elif self.granularity == "okręgi":
-            pass
+        # make DB driver instance for each unit
+        for unit_id in units:
+            # get IDs of records in tables
+            gmina_ids = db_refs.get_gmina(unit_id)
+            powiat_ids = db_refs.get_powiat(unit_id)
+            okreg_ids = db_refs.get_okreg(unit_id)
+            voivodship_ids = db_refs.get_voivodship(unit_id)
+            obwody_ids = db_refs.get_obwod(unit_id)
+            protocole_ids = db_refs.get_protocole(unit_id)
+            list_ids = db_refs.get_list(unit_id)
+            candidate_ids = db_refs.get_candidate(unit_id)
+            mandate_ids = db_refs.get_mandate(unit_id)
+            wyniki_ids = db_refs.get_wyniki(unit_id)
 
-        elif self.granularity == "powiaty":
-            pass
+            tables_and_ids = {
+                "gminy": gmina_ids,
+                "powiaty": powiat_ids,
+                "okręgi": okreg_ids,
+                "województwa": voivodship_ids,
+                "obwody": obwody_ids,
+                "protokoły": protocole_ids,
+                "listy": list_ids,
+                "kandydaci": candidate_ids,
+                "mandaty": mandate_ids
+            }
+            tables_and_ids.update(wyniki_ids)
 
-        elif self.granularity == "gminy":
-            # do job
-            gminy = self.db[self.granularity].find({})
+            # create db driver instance
+            db = DbDriver.__new__(DbDriver)
+            db._DbDriver__read_only = False
+            db._DbDriver__tables = {}
+            db._DbDriver__dropped_tables = []
 
-            for gmina_id, gmina in gminy.items():
-                # get IDs of records
-                powiat_ids = db_refs.gmina_to_powiat(gmina_id)
-                okreg_ids = db_refs.gmina_to_okreg(gmina_id)
-                voivodship_ids = db_refs.gmina_to_voivodship(gmina_id)
-                obwody_ids = db_refs.gmina_to_obwod(gmina_id)
-                protocole_ids = db_refs.gmina_to_protocole(gmina_id)
-                list_ids = db_refs.gmina_to_list(gmina_id)
-                candidate_ids = db_refs.gmina_to_candidate(gmina_id)
-                mandate_ids = db_refs.gmina_to_mandate(gmina_id)
-                wyniki_ids = db_refs.gmina_to_wyniki(gmina_id)
+            # copy records
+            for table_name, ids_list in tables_and_ids.items():
+                db.create_table(table_name)
+                for _id in ids_list:
+                    record = self.source_db[table_name][_id]
+                    db[table_name].put(dict(record), _id=_id)
 
-                # create tables
-                db = DbDriver.__new__(DbDriver)
-                db._DbDriver__read_only = False
-                db._DbDriver__tables = {}
-                db._DbDriver__dropped_tables = []
-                db.create_table("województwa")
-                db.create_table("okręgi")
-                db.create_table("powiaty")
-                db.create_table("gminy")
-                db.create_table("obwody")
-                db.create_table("protokoły")
-                db.create_table("mandaty")
-                db.create_table("kandydaci")
-                db.create_table("listy")
-
-                # copy
-                db["gminy"].put(dict(gmina), _id=gmina_id)
-                tables_ids_list = [
-                    ("powiaty", powiat_ids),
-                    ("okręgi", okreg_ids),
-                    ("województwa", voivodship_ids),
-                    ("obwody", obwody_ids),
-                    ("protokoły", protocole_ids),
-                    ("listy", list_ids),
-                    ("kandydaci", candidate_ids),
-                    ("mandaty", mandate_ids)
-                ]
-                for table_name_i, ids_list in tables_ids_list:
-                    for _id in ids_list:
-                        record = self.db[table_name_i][_id]
-                        db[table_name_i].put(dict(record), _id=_id)
-
-                # create and copy results tables
-                for wyniki_table_name, ids_list in wyniki_ids.items():
-                    db.create_table(wyniki_table_name)
-                    for _id in ids_list:
-                        record = self.db[wyniki_table_name][_id]
-                        db[wyniki_table_name].put(dict(record), _id=_id)
-
-                # freeze db and conclude iteration
-                db._DbDriver__read_only = True
-                yield db
+            # freeze db and conclude iteration
+            db._DbDriver__read_only = True
+            yield db
 
     def _visualize(self):
         # split db into units
@@ -227,7 +241,7 @@ class Controller:
             values.append(value)
 
         # determine outline units
-        outline_geos = self.db[self.outlines_granularity].find({}, fields="geo")
+        outline_geos = self.source_db[self.outlines_granularity].find({}, fields="geo")
         outline_regions = [Region.from_json(geo) for geo in outline_geos]
 
         # make visualizer object
@@ -251,14 +265,20 @@ class Controller:
 
         # render plot to window or file
         if self.output_filename:
-            if not os.path.exists(self.visualized_dir):
-                os.makedirs(self.visualized_dir)
-            output_path = self.visualized_dir + self.output_filename
+            visualized_dir = self.elections.visualized_dir
+            if not os.path.exists(visualized_dir):
+                ### TODO - make image dir, not only main dir
+                os.makedirs(visualized_dir)
+            output_path = visualized_dir + self.output_filename
             self.vis.save_image(output_path)
         else:
             self.vis.show()
 
     def run(self):
+        """
+        Run prepared analysis object. It first makes sure the DB is
+        ready to use, or loads it and possibly runs preprocessing/etc.
+        """
         self._load_db()
         self._visualize()
 
@@ -270,127 +290,147 @@ class Controller:
 
 
 class DbReferences:
-    @staticmethod
-    def inverse_dict(dictionary):
-        # TODO
-        pass
+    """
+    This class is making indexes on relations between tables in DB.
+    It is needed for pure performance requirements. This class could be
+    discarded if the custom DB driver used in this project would have
+    indexes implemented and be optimized for performance.
 
-    def __init__(self, db, granularity=None):
-        # TODO - GRANULARITY
+    It assumes that splitting DB would need to get only those records
+    from tables, that corresponds to the given territorial unit. That
+    causes good hermetization of data and allows to easily avoid bugs
+    and mistakes in user-defined function.
+    """
+    SINGULAR_DICT = {
+        "województwa": "voivodship",
+        "okręgi": "okreg",
+        "powiaty": "powiat",
+        "gminy": "gmina",
+    }
+
+    @staticmethod
+    def _inverse_dict(dictionary):
         """
-        There are needed indexes that assign from:
-        voivodships/constituencies/district/communes
+        Take dictionary of keys and lists of values and turn it
+        to dictionary of values with assigned lists of keys which
+        are paired in original dictionary.
+
+        dictionary: dict of {key: [value_1, value_2, ..., value_n]}
+        """
+        values = []
+        for value_list in dictionary.values():
+            values += value_list
+
+        inversed_dict = {value: [] for value in values}
+        for key, value_list in dictionary.items():
+            for value in value_list:
+                inversed_dict[value].append(key)
+
+        return inversed_dict
+
+    def __init__(self, source_db, granularity):
+        """
+        This object makes reading DB relations easier. Each of 4
+        granularity levels has to have assigned corresponding records
+        IDs for all tables in DB.
+
+        Explicitly saying - there are indexes needed that makes
+        assignment from:
+            - voivodships
+            - constituencies
+            - district
+            - communes
         to list of:
-        - voivodships
-        - constituencies
-        - districts
-        - communes
-        - polling districts
-        - protocoles
-        they are associated with.
+            - voivodships
+            - constituencies
+            - districts
+            - communes
+            - polling districts
+            - protocoles
+        which they are associated with.
 
         Alse intermediate assignments are needed from constituencies to:
         - candidates
         - lists
         - mandates
+        The latter IDs are determined dynamically during calling
+        methods, because the lists of values for each unit within
+        one constituency would be the same.
 
-        Results IDs will be dynamically determined.
+        Voting results IDs are dynamically determined.
         """
         print("Creating indexes for data...")
 
-        # direct indexes
-        self._voivodships = db["województwa"].find({}, fields="_id")
+        self.granularity = granularity
+
+        # auxiliary indexes and names lists
+        self._voivodships = source_db["województwa"].find({}, fields="_id")
+        self._okregi = source_db["okręgi"].find({}, fields="_id")
+        self._gminy = source_db["gminy"].find({}, fields="_id")
         self._wyniki_table_names = {
             okreg_id: f"wyniki_{okreg_no}"
             for okreg_id, okreg_no
-            in db["okręgi"].find({}, fields=["_id", "number"])
+            in source_db["okręgi"].find({}, fields=["_id", "number"])
+        }
+        obwod_to_protocole = {
+            obwod_id: protocole_id
+            for protocole_id, obwod_id
+            in source_db["protokoły"].find({}, fields=["_id", "obwod"])
         }
 
+        # direct indexes
         self._gmina_to_powiat = {
             gmina_id: [powiat_id]
             for gmina_id, powiat_id
-            in db["gminy"].find({}, fields=["_id", "parent"])
+            in source_db["gminy"].find({}, fields=["_id", "parent"])
         }
 
         self._powiat_to_voivodship = {
             powiat_id: [voivodship_id]
             for powiat_id, voivodship_id
-            in db["powiaty"].find({}, fields=["_id", "parent"])
+            in source_db["powiaty"].find({}, fields=["_id", "parent"])
         }
 
         self._okreg_to_powiat = {
             okreg_id: json.loads(powiaty)
             for okreg_id, powiaty
-            in db["okręgi"].find({}, fields=["_id", "powiat_list"])}
+            in source_db["okręgi"].find({}, fields=["_id", "powiat_list"])}
 
-        self._powiat_to_okreg = {
-            powiat_id: [okreg_id]
-            for okreg_id, powiat_list in self._okreg_to_powiat.items()
-            for powiat_id in powiat_list
-        }
+        self._powiat_to_okreg = self._inverse_dict(self._okreg_to_powiat)
 
         self._gmina_to_okreg = {}
-        for gmina_id in self._gmina_to_powiat.keys():
+        for gmina_id in self._gminy:
             powiat_id = self._gmina_to_powiat[gmina_id][0]
             okreg_id = self._powiat_to_okreg[powiat_id][0]
             self._gmina_to_okreg[gmina_id] = [okreg_id]
 
         self._gmina_to_voivodship = {}
-        for gmina_id in self._gmina_to_powiat.keys():
+        for gmina_id in self._gminy:
             powiat_id = self._gmina_to_powiat[gmina_id][0]
             voivodship_id = self._powiat_to_voivodship[powiat_id][0]
             self._gmina_to_voivodship[gmina_id] = [voivodship_id]
 
         self._okreg_to_voivodship = {}
-        for okreg_id in self._okreg_to_powiat.keys():
+        for okreg_id in self._okregi:
             powiat_id = self._okreg_to_powiat[okreg_id][0]
             voivodship_id = self._powiat_to_voivodship[powiat_id][0]
             self._okreg_to_voivodship[okreg_id] = [voivodship_id]
 
-        self._powiat_to_gmina = {
-            powiat_id: [] for powiat_id
-            in self._powiat_to_voivodship.keys()
-        }
-        for gmina_id, powiaty in self._gmina_to_powiat.items():
-            powiat_id = powiaty[0]
-            self._powiat_to_gmina[powiat_id].append(gmina_id)
+        self._powiat_to_gmina = self._inverse_dict(self._gmina_to_powiat)
 
-        self._okreg_to_gmina = {
-            okreg_id: [] for okreg_id
-            in self._okreg_to_powiat.keys()
-        }
-        for gmina_id, okregi in self._gmina_to_okreg.items():
-            okreg_id = okregi[0]
-            self._okreg_to_gmina[okreg_id].append(gmina_id)
+        self._okreg_to_gmina = self._inverse_dict(self._gmina_to_okreg)
 
-        self._voivodship_to_gmina = {
-            voivodship_id: [] for voivodship_id
-            in self._voivodships
-        }
-        for gmina_id, voivodship_list in self._gmina_to_voivodship.items():
-            voivodship_id = voivodship_list[0]
-            self._voivodship_to_gmina[voivodship_id].append(gmina_id)
+        self._voivodship_to_gmina = self._inverse_dict(self._gmina_to_voivodship)
 
-        self._voivodship_to_powiat = {
-            voivodship_id: [] for voivodship_id
-            in self._voivodships
-        }
-        for powiat_id, voivodship_list in self._powiat_to_voivodship.items():
-            voivodship_id = voivodship_list[0]
-            self._voivodship_to_powiat[voivodship_id].append(powiat_id)
+        self._voivodship_to_powiat = self._inverse_dict(
+            self._powiat_to_voivodship)
 
-        self._voivodship_to_okreg = {
-            voivodship_id: [] for voivodship_id
-            in self._voivodships
-        }
-        for okreg_id, voivodship_list in self._okreg_to_voivodship.items():
-            voivodship_id = voivodship_list[0]
-            self._voivodship_to_okreg[voivodship_id].append(okreg_id)
+        self._voivodship_to_okreg = self._inverse_dict(self._okreg_to_voivodship)
 
         self._gmina_to_obwod = {
-            gmina_id: [] for gmina_id in self._gmina_to_powiat.keys()}
+            gmina_id: [] for gmina_id in self._gminy}
         for obwod_id, gmina_id \
-                in db["obwody"].find({}, fields=["_id", "gmina"]):
+                in source_db["obwody"].find({}, fields=["_id", "gmina"]):
             self._gmina_to_obwod[gmina_id].append(obwod_id)
 
         self._powiat_to_obwod = {}
@@ -414,37 +454,31 @@ class DbReferences:
                 obwody += self._okreg_to_obwod[okreg_id]
             self._voivodship_to_obwod[voivodship_id] = obwody
 
-        obwod_to_protocole = {
-            obwod_id: protocole_id
-            for protocole_id, obwod_id
-            in db["protokoły"].find({}, fields=["_id", "obwod"])
-        }
-
         self._gmina_to_protocole = {
             gmina_id: [obwod_to_protocole[obwod_id] for obwod_id in obwody]
             for gmina_id, obwody in self._gmina_to_obwod.items()
         }
+
         self._powiat_to_protocole = {
             powiat_id: [obwod_to_protocole[obwod_id] for obwod_id in obwody]
             for powiat_id, obwody in self._powiat_to_obwod.items()
         }
+
         self._okreg_to_protocole = {
             okreg_id: [obwod_to_protocole[obwod_id] for obwod_id in obwody]
             for okreg_id, obwody in self._okreg_to_obwod.items()
         }
+
         self._voivodship_to_protocole = {
             voivodship_id: [obwod_to_protocole[obwod_id] for obwod_id in obwody]
             for voivodship_id, obwody in self._voivodship_to_obwod.items()
         }
 
         # intermediate indexes
-        candidates = db["kandydaci"].find({})  # maybe add `{"is_crossed_out": False}` ?
-        self._okreg_to_candidate = {
-            okreg_id: [] for okreg_id in self._okreg_to_voivodship.keys()}
-        self._okreg_to_list = {
-            okreg_id: [] for okreg_id in self._okreg_to_voivodship.keys()}
-        self._okreg_to_mandate = {
-            okreg_id: [] for okreg_id in self._okreg_to_voivodship.keys()}
+        candidates = source_db["kandydaci"].find({})  # maybe add `{"is_crossed_out": False}` ?
+        self._okreg_to_candidate = {okreg_id: [] for okreg_id in self._okregi}
+        self._okreg_to_list = {okreg_id: [] for okreg_id in self._okregi}
+        self._okreg_to_mandate = {okreg_id: [] for okreg_id in self._okregi}
 
         for candidate_id, candidate in candidates.items():
             okreg_id = candidate["constituency"]
@@ -457,172 +491,135 @@ class DbReferences:
             lists_list = list(set(lists_list))
             self._okreg_to_list[okreg_id] = lists_list
 
-        for mandate_id, candidate_id in db["mandaty"].find(
+        for mandate_id, candidate_id in source_db["mandaty"].find(
                 {}, fields=["_id", "candidate"]):
             okreg_id = candidates[candidate_id]["constituency"]
             self._okreg_to_mandate[okreg_id].append(mandate_id)
 
         # results IDs
+        self._obwod_to_table_name = {}
+        for obwod_id, okreg_id in source_db["obwody"].find(
+                {}, fields=["_id", "constituency"]):
+            table_name_i = self._wyniki_table_names[okreg_id]
+            self._obwod_to_table_name[obwod_id] = table_name_i
+
         self._obwod_to_wyniki = {}
         for table_name_i in self._wyniki_table_names.values():
-            for wyniki_id, obwod_id in db[table_name_i].find(
+            for wyniki_id, obwod_id in source_db[table_name_i].find(
                     {}, fields=["_id", "obwod"]):
                 self._obwod_to_wyniki[obwod_id] = wyniki_id
 
         print("Indexes for data created.")
         print()
 
-    def gmina_to_powiat(self, gmina_id):
-        return self._gmina_to_powiat[gmina_id]
+    def get_relation(self, _from, _to, _id):
+        # convert table names
+        if _from in self.SINGULAR_DICT:
+            _from = self.SINGULAR_DICT[_from]
+        if _to in self.SINGULAR_DICT:
+            _to = self.SINGULAR_DICT[_to]
+        # handle identity
+        if _from == _to:
+            return [_id]
+        # compose attribute name
+        relation_attr_name = f"_{_from}_to_{_to}"
+        # get attribute
+        relation_dict = getattr(self, relation_attr_name)
+        # get relation ids
+        return relation_dict[_id]
 
-    def gmina_to_okreg(self, gmina_id):
-        return self._gmina_to_okreg[gmina_id]
+    def get_gmina(self, unit_id):
+        if self.granularity == "gminy":
+            return [unit_id]
+        elif self.granularity == "powiaty":
+            return self._powiat_to_gmina[unit_id]
+        elif self.granularity == "okręgi":
+            return self._okreg_to_gmina[unit_id]
+        elif self.granularity == "województwa":
+            return self._voivodship_to_gmina[unit_id]
 
-    def gmina_to_voivodship(self, gmina_id):
-        return self._gmina_to_voivodship[gmina_id]
+    def get_powiat(self, unit_id):
+        if self.granularity == "gminy":
+            return self._gmina_to_powiat[unit_id]
+        elif self.granularity == "powiaty":
+            return [unit_id]
+        elif self.granularity == "okręgi":
+            return self._okreg_to_powiat[unit_id]
+        elif self.granularity == "województwa":
+            return self._voivodship_to_powiat[unit_id]
 
+    def get_okreg(self, unit_id):
+        if self.granularity == "gminy":
+            return self._gmina_to_okreg[unit_id]
+        elif self.granularity == "powiaty":
+            return self._powiat_to_okreg[unit_id]
+        elif self.granularity == "okręgi":
+            return [unit_id]
+        elif self.granularity == "województwa":
+            return self._voivodship_to_okreg[unit_id]
 
-    def powiat_to_gmina(self, powiat_id):
-        return self._powiat_to_gmina[powiat_id]
+    def get_voivodship(self, unit_id):
+        if self.granularity == "gminy":
+            return self._gmina_to_voivodship[unit_id]
+        elif self.granularity == "powiaty":
+            return self._powiat_to_voivodship[unit_id]
+        elif self.granularity == "okręgi":
+            return self._okreg_to_voivodship[unit_id]
+        elif self.granularity == "województwa":
+            return [unit_id]
 
-    def powiat_to_okreg(self, powiat_id):
-        return self._powiat_to_okreg[powiat_id]
+    def get_obwod(self, unit_id):
+        if self.granularity == "gminy":
+            return self._gmina_to_obwod[unit_id]
+        elif self.granularity == "powiaty":
+            return self._powiat_to_obwod[unit_id]
+        elif self.granularity == "okręgi":
+            return self._okreg_to_obwod[unit_id]
+        elif self.granularity == "województwa":
+            return self._voivodship_to_obwod[unit_id]
 
-    def powiat_to_voivodship(self, powiat_id):
-        return self._powiat_to_voivodship[powiat_id]
+    def get_protocole(self, unit_id):
+        if self.granularity == "gminy":
+            return self._gmina_to_protocole[unit_id]
+        elif self.granularity == "powiaty":
+            return self._powiat_to_protocole[unit_id]
+        elif self.granularity == "okręgi":
+            return self._okreg_to_protocole[unit_id]
+        elif self.granularity == "województwa":
+            return self._voivodship_to_protocole[unit_id]
 
-
-    def okreg_to_gmina(self, okreg_id):
-        return self._okreg_to_gmina[okreg_id]
-
-    def okreg_to_powiat(self, okreg_id):
-        return self._okreg_to_powiat[okreg_id]
-
-    def okreg_to_voivodship(self, okreg_id):
-        return self._okreg_to_voivodship[okreg_id]
-
-
-    def voivodship_to_gmina(self, voivodship_id):
-        return self._voivodship_to_gmina[voivodship_id]
-
-    def voivodship_to_powiat(self, voivodship_id):
-        return self._voivodship_to_powiat[voivodship_id]
-
-    def voivodship_to_okreg(self, voivodship_id):
-        return self._voivodship_to_okreg[voivodship_id]
-
-
-    def gmina_to_obwod(self, gmina_id):
-        return self._gmina_to_obwod[gmina_id]
-
-    def gmina_to_protocole(self, gmina_id):
-        return self._gmina_to_protocole[gmina_id]
-
-    def gmina_to_candidate(self, gmina_id):
-        okreg_id = self._gmina_to_okreg[gmina_id][0]
-        return self._okreg_to_candidate[okreg_id]
-
-    def gmina_to_list(self, gmina_id):
-        okreg_id = self._gmina_to_okreg[gmina_id][0]
-        return self._okreg_to_list[okreg_id]
-
-    def gmina_to_mandate(self, gmina_id):
-        okreg_id = self._gmina_to_okreg[gmina_id][0]
-        return self._okreg_to_mandate[okreg_id]
-
-    def gmina_to_wyniki(self, gmina_id):
-        okreg_id = self._gmina_to_okreg[gmina_id][0]
-        table_name_i = self._wyniki_table_names[okreg_id]
-        obwody_ids = self._gmina_to_obwod[gmina_id]
-        wyniki_ids = [self._obwod_to_wyniki[obwod_id]
-                      for obwod_id in obwody_ids]
-        return {table_name_i: wyniki_ids}
-
-
-    def powiat_to_obwod(self, powiat_id):
-        return self._powiat_to_obwod[powiat_id]
-
-    def powiat_to_protocole(self, powiat_id):
-        return self._powiat_to_protocole[powiat_id]
-
-    def powiat_to_candidate(self, powiat_id):
-        okreg_id = self._powiat_to_okreg[powiat_id][0]
-        return self._okreg_to_candidate[okreg_id]
-
-    def powiat_to_list(self, powiat_id):
-        okreg_id = self._powiat_to_okreg[powiat_id][0]
-        return self._okreg_to_list[okreg_id]
-
-    def powiat_to_mandate(self, powiat_id):
-        okreg_id = self._powiat_to_okreg[powiat_id][0]
-        return self._okreg_to_mandate[okreg_id]
-
-    def powiat_to_wyniki(self, powiat_id):
-        okreg_id = self._powiat_to_okreg[powiat_id][0]
-        table_name_i = self._wyniki_table_names[okreg_id]
-        obwody_ids = self._powiat_to_obwod[powiat_id]
-        wyniki_ids = [self._obwod_to_wyniki[obwod_id]
-                      for obwod_id in obwody_ids]
-        return {table_name_i: wyniki_ids}
-
-
-    def okreg_to_obwod(self, okreg_id):
-        return self._okreg_to_obwod[okreg_id]
-
-    def okreg_to_protocole(self, okreg_id):
-        return self._okreg_to_protocole[okreg_id]
-
-    def okreg_to_candidate(self, okreg_id):
-        return self._okreg_to_candidate[okreg_id]
-
-    def okreg_to_list(self, okreg_id):
-        return self._okreg_to_list[okreg_id]
-
-    def okreg_to_mandate(self, okreg_id):
-        return self._okreg_to_mandate[okreg_id]
-
-    def okreg_to_wyniki(self, okreg_id):
-        table_name_i = self._wyniki_table_names[okreg_id]
-        obwody_ids = self._okreg_to_obwod[okreg_id]
-        wyniki_ids = [self._obwod_to_wyniki[obwod_id]
-                      for obwod_id in obwody_ids]
-        return {table_name_i: wyniki_ids}
-
-
-    def voivodship_to_obwod(self, voivodship_id):
-        return self._voivodship_to_obwod[voivodship_id]
-
-    def voivodship_to_protocole(self, voivodship_id):
-        return self._voivodship_to_protocole[voivodship_id]
-
-    def voivodship_to_candidate(self, voivodship_id):
-        okreg_ids = self._voivodship_to_okreg[voivodship_id]
+    def get_candidate(self, unit_id):
+        okreg_ids = self.get_okreg(unit_id)
         candidates_ids = []
         for okreg_id in okreg_ids:
             candidates_ids += self._okreg_to_candidate[okreg_id]
         return candidates_ids
 
-    def voivodship_to_list(self, voivodship_id):
-        okreg_ids = self._voivodship_to_okreg[voivodship_id]
+    def get_list(self, unit_id):
+        okreg_ids = self.get_okreg(unit_id)
         list_ids = []
         for okreg_id in okreg_ids:
             list_ids += self._okreg_to_list[okreg_id]
         return list_ids
 
-    def voivodship_to_mandate(self, voivodship_id):
-        okreg_ids = self._voivodship_to_okreg[voivodship_id]
+    def get_mandate(self, unit_id):
+        okreg_ids = self.get_okreg(unit_id)
         mandate_ids = []
         for okreg_id in okreg_ids:
             mandate_ids += self._okreg_to_mandate[okreg_id]
         return mandate_ids
 
-    def voivodship_to_wyniki(self, voivodship_id):
+    def get_wyniki(self, unit_id):
         wyniki_dict = {}
-        okregi_ids = self._voivodship_to_okreg[powiat_id]
+        okregi_ids = self.get_okreg(unit_id)
         for okreg_id in okregi_ids:
             table_name_i = self._wyniki_table_names[okreg_id]
-            obwody_ids = self._okreg_to_obwod[powiat_id]
-            wyniki_ids = [self._obwod_to_wyniki[obwod_id]
-                          for obwod_id in obwody_ids]
-            wyniki_dict[table_name_i] = wyniki_ids
+            wyniki_dict[table_name_i] = []
+
+        obwody_ids = self.get_obwod(unit_id)
+        for obwod_id in obwody_ids:
+            wyniki_id = self._obwod_to_wyniki[obwod_id]
+            table_name_i = self._obwod_to_table_name[obwod_id]
+            wyniki_dict[table_name_i].append(wyniki_id)
+
         return wyniki_dict
