@@ -77,22 +77,37 @@ class Controller:
         interpolation: str - method of interpolation of colors in the
             colormap.
         """
+        # unpack unit
+        if unit is None:
+            unit_granularity = None
+            unit_id = None
+        else:
+            unit_granularity, unit_id = unit
+
         # translate English variants of arguments
         if granularity in GRANULARITY_DICT:
             granularity = GRANULARITY_DICT[granularity]
         if outlines_granularity in GRANULARITY_DICT:
             outlines_granularity = GRANULARITY_DICT[outlines_granularity]
+        if unit_granularity in GRANULARITY_DICT:
+            unit_granularity = GRANULARITY_DICT[unit_granularity]
 
         # basic correctness checks
         if granularity not in GRANULARITY_DICT.values():
             raise ValueError(
                 '`granularity` should be one of: "voivodships", '
-                '"constituencies" or "districts", "communes"')
+                '"constituencies", "districts" or "communes"')
 
         if outlines_granularity not in GRANULARITY_DICT.values():
             raise ValueError(
                 '`outlines_granularity` should be one of: "voivodships", '
-                '"constituencies" or "districts", "communes"')
+                '"constituencies", "districts" or "communes"')
+
+        if unit_granularity is not None \
+           and unit_granularity not in GRANULARITY_DICT.values():
+            raise ValueError(
+                '`unit` first part should be one of: "voivodships", '
+                '"constituencies", "districts" or "communes"')
 
         if not isinstance(elections, tuple) or len(elections) != 2:
             raise TypeError("Please, provide elections identifier: (type, year).")
@@ -103,6 +118,8 @@ class Controller:
         self.function = function
         self.colormap = colormap
         self.granularity = granularity
+        self.unit_granularity = unit_granularity
+        self.unit_id = unit_id
         self.outlines_granularity = outlines_granularity
         self.normalization = normalization
         self.title = title
@@ -146,9 +163,22 @@ class Controller:
         the DB instance data given to it, and be sure that they are
         isolated from data corresponding to other units.
         """
-        units = self.source_db[self.granularity].find({})
+        # prepare indexes
         db_refs = DbReferences(self.source_db, self.granularity)
 
+        # prepare units list
+        if self.unit_granularity is None:
+            units = self.source_db[self.granularity].find({})
+        else:
+            # check if unit is correctly set
+            self.source_db[self.unit_granularity][self.unit_id]
+            units = db_refs.get_relation(
+                _from=self.unit_granularity,
+                _to=self.granularity,
+                _id=self.unit_id,
+            )
+
+        # make DB driver instance for each unit
         for unit_id in units:
             # get IDs of records in tables
             gmina_ids = db_refs.get_gmina(unit_id)
@@ -271,6 +301,13 @@ class DbReferences:
     causes good hermetization of data and allows to easily avoid bugs
     and mistakes in user-defined function.
     """
+    SINGULAR_DICT = {
+        "województwa": "voivodship",
+        "okręgi": "okreg",
+        "powiaty": "powiat",
+        "gminy": "gmina",
+    }
+
     @staticmethod
     def _inverse_dict(dictionary):
         """
@@ -474,6 +511,22 @@ class DbReferences:
 
         print("Indexes for data created.")
         print()
+
+    def get_relation(self, _from, _to, _id):
+        # convert table names
+        if _from in self.SINGULAR_DICT:
+            _from = self.SINGULAR_DICT[_from]
+        if _to in self.SINGULAR_DICT:
+            _to = self.SINGULAR_DICT[_to]
+        # handle identity
+        if _from == _to:
+            return [_id]
+        # compose attribute name
+        relation_attr_name = f"_{_from}_to_{_to}"
+        # get attribute
+        relation_dict = getattr(self, relation_attr_name)
+        # get relation ids
+        return relation_dict[_id]
 
     def get_gmina(self, unit_id):
         if self.granularity == "gminy":

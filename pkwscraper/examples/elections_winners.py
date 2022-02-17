@@ -2,7 +2,7 @@
 import numpy as np
 
 from pkwscraper.lib.controller import Controller
-from pkwscraper.lib.dbdriver import dbdriver
+from pkwscraper.lib.dbdriver import DbDriver
 from pkwscraper.lib.visualizer import Colormap
 
 """
@@ -127,7 +127,7 @@ def main():
         ctrl_j = Controller(
             ("Sejm", 2015), function, colormap, granularity=gran,
             unit=("voivodships", mazovian_id), outlines_granularity=out_gran,
-            normalization=False, output_filename=f"winners_{name}.png"
+            normalization=False, output_filename=f"mazovia_winners_{name}.png"
         )
         ctrl_j.run()
 
