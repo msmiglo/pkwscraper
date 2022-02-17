@@ -8,14 +8,15 @@ from pkwscraper.lib.region import Region
 from pkwscraper.lib.visualizer import Visualizer
 
 """
-Concepts dictionary explained:
+Concepts explained:
 
-- user function - the function passed to class that takes data for
-    single territorial unit and returns a value or vector of values;
+- user function / function - the function passed to Controller that
+    takes data for single territorial unit and returns a value or vector
+    of values;
 - granularity - level of territorial units at which data will be split
     before passing to the function;
 - downloading and scraping - first stage of data processing - obtaining
-    raw data from internet, it includes rescribing to db tables;
+    raw data from internet, it includes rescribing to DB tables;
 - preprocessing - cleaning rescribed data, making them ready to use
     by visualizing step;
 - visualizing - taking preprocessed data and making plots with it;
@@ -33,13 +34,42 @@ GRANULARITY_DICT = {
 
 
 class Controller:
+    """
+    This is the main class of the project, that calls all steps
+    of data processing. This is created by passing main parameters
+    and, most importantly, evaluating function. This renders a plot
+    to image or for showing in separate window.
+    """
     def __init__(self, elections, function, colormap, granularity,
                 outlines_granularity=None, normalization=True,
                  title=None, show_legend=False, show_grid=False,
                  output_filename=None, interpolation='linear'):
         """
-        output_file - str or None - if None - the result will be
-            displayed in new window
+        Constructor does basic checks and creates class attributes.
+
+        elections: (str, int) - type and year (unambiguous identifier)
+            of elections,
+        function: callable - function to evaluate data for single unit,
+        colormap: callable - function or object that converts numerical
+            values returned by function to proper colors,
+        granularity: str - the level of territorial units that plot
+            will be split into,
+        outlines_granularity - level of territorial units that borders
+            will be placed on top of plot as contours,
+        normalization: bool - whether or not values from all units
+            should be scaled to (0,1) range before passing to colormap,
+        title: str - title of plot that is placed over the plot,
+        show_legend: bool - whether or not to show the color key in
+            form of legend, can contain extreme values written next
+            to it,
+        show_grid: bool - whether or not to show the frame around
+            the units plot,
+        output_filename: str or None - if None - the result will be
+            displayed in new window, otherwise, it will be rendered to
+            image file saved to given filenam in default visualizing
+            directory,
+        interpolation: str - method of interpolation of colors in the
+            colormap.
         """
         # translate English variants of arguments
         if granularity in GRANULARITY_DICT:
@@ -104,6 +134,12 @@ class Controller:
         self.source_db = DbDriver(self.elections.preprocessed_dir, read_only=True)
 
     def _split_db(self):
+        """
+        This is used to split data in DB to correspond only to the
+        single unit of analysis. Function passed by user can use all
+        the DB instance data given to it, and be sure that they are
+        isolated from data corresponding to other units.
+        """
         units = self.source_db[self.granularity].find({})
         db_refs = DbReferences(self.source_db, self.granularity)
 
@@ -203,6 +239,10 @@ class Controller:
             self.vis.show()
 
     def run(self):
+        """
+        Run prepared analysis object. It first makes sure the DB is
+        ready to use, or loads it and possibly runs preprocessing/etc.
+        """
         self._load_db()
         self._visualize()
 
@@ -214,8 +254,26 @@ class Controller:
 
 
 class DbReferences:
+    """
+    This class is making indexes on relations between tables in DB.
+    It is needed for pure performance requirements. This class could be
+    discarded if the custom DB driver used in this project would have
+    indexes implemented and be optimized for performance.
+
+    It assumes that splitting DB would need to get only those records
+    from tables, that corresponds to the given territorial unit. That
+    causes good hermetization of data and allows to easily avoid bugs
+    and mistakes in user-defined function.
+    """
     @staticmethod
-    def inverse_dict(dictionary):
+    def _inverse_dict(dictionary):
+        """
+        Take dictionary of keys and lists of values and turn it
+        to dictionary of values with assigned lists of keys which
+        are paired in original dictionary.
+
+        dictionary: dict of {key: [value_1, value_2, ..., value_n]}
+        """
         values = []
         for value_list in dictionary.values():
             values += value_list
@@ -229,23 +287,34 @@ class DbReferences:
 
     def __init__(self, source_db, granularity):
         """
-        There are needed indexes that assign from:
-        voivodships/constituencies/district/communes
+        This object makes reading DB relations easier. Each of 4
+        granularity levels has to have assigned corresponding records
+        IDs for all tables in DB.
+
+        Explicitly saying - there are indexes needed that makes
+        assignment from:
+            - voivodships
+            - constituencies
+            - district
+            - communes
         to list of:
-        - voivodships
-        - constituencies
-        - districts
-        - communes
-        - polling districts
-        - protocoles
-        they are associated with.
+            - voivodships
+            - constituencies
+            - districts
+            - communes
+            - polling districts
+            - protocoles
+        which they are associated with.
 
         Alse intermediate assignments are needed from constituencies to:
         - candidates
         - lists
         - mandates
+        The latter IDs are determined dynamically during calling
+        methods, because the lists of values for each unit within
+        one constituency would be the same.
 
-        Results IDs will be dynamically determined.
+        Voting results IDs are dynamically determined.
         """
         print("Creating indexes for data...")
 
@@ -284,7 +353,7 @@ class DbReferences:
             for okreg_id, powiaty
             in source_db["okręgi"].find({}, fields=["_id", "powiat_list"])}
 
-        self._powiat_to_okreg = self.inverse_dict(self._okreg_to_powiat)
+        self._powiat_to_okreg = self._inverse_dict(self._okreg_to_powiat)
 
         self._gmina_to_okreg = {}
         for gmina_id in self._gminy:
@@ -304,16 +373,16 @@ class DbReferences:
             voivodship_id = self._powiat_to_voivodship[powiat_id][0]
             self._okreg_to_voivodship[okreg_id] = [voivodship_id]
 
-        self._powiat_to_gmina = self.inverse_dict(self._gmina_to_powiat)
+        self._powiat_to_gmina = self._inverse_dict(self._gmina_to_powiat)
 
-        self._okreg_to_gmina = self.inverse_dict(self._gmina_to_okreg)
+        self._okreg_to_gmina = self._inverse_dict(self._gmina_to_okreg)
 
-        self._voivodship_to_gmina = self.inverse_dict(self._gmina_to_voivodship)
+        self._voivodship_to_gmina = self._inverse_dict(self._gmina_to_voivodship)
 
-        self._voivodship_to_powiat = self.inverse_dict(
+        self._voivodship_to_powiat = self._inverse_dict(
             self._powiat_to_voivodship)
 
-        self._voivodship_to_okreg = self.inverse_dict(self._okreg_to_voivodship)
+        self._voivodship_to_okreg = self._inverse_dict(self._okreg_to_voivodship)
 
         self._gmina_to_obwod = {
             gmina_id: [] for gmina_id in self._gminy}

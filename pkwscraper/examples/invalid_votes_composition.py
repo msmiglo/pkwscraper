@@ -93,7 +93,6 @@ def colormap(values):
 
 
 def main():
-    return
     # run
     ctrl = Controller(
         ("Sejm", 2015), function, colormap, granularity="communes",

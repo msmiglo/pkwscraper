@@ -5,6 +5,10 @@ from pkwscraper.lib.visualizer import Colormap
 """
 This example shows fraction of votes that was given to women on
 different granularity levels.
+
+Color code:
+- blue: men won voting
+- pink: women won voting
 """
 
 def function(db):
@@ -44,6 +48,7 @@ colormap = Colormap(color_data={
     0.5: (1.0, 1.0, 1.0, 0.82),
     1.0: (1.0, 0.6, 0.7, 0.82),
 })
+
 
 def main():
     grans = ["communes", "districts", "constituencies", "voivodships"]

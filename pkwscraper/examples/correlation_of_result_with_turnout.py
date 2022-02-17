@@ -116,7 +116,6 @@ def get_whole_country_lists():
 
 
 def main():
-    return
     # get whole-country lists
     lists = get_whole_country_lists()
 

@@ -38,9 +38,9 @@ class TestDbReferences(TestCase):
             "O": ["Numbers", "Letters"]
         }
         # act
-        result_1 = DbReferences.inverse_dict(dictionary_1)
-        result_2 = DbReferences.inverse_dict(dictionary_2)
-        result_3 = DbReferences.inverse_dict(dictionary_3)
+        result_1 = DbReferences._inverse_dict(dictionary_1)
+        result_2 = DbReferences._inverse_dict(dictionary_2)
+        result_3 = DbReferences._inverse_dict(dictionary_3)
         # assert
         self.assertDictEqual(result_1, expected_1)
         self.assertDictEqual(result_2, expected_2)

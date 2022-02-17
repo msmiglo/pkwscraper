@@ -1,5 +1,6 @@
 
 from matplotlib.cm import ocean
+from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -82,6 +83,7 @@ class TestColormap(TestCase):
         cm = Colormap("ocean")
 
         self.assertIs(cm._Colormap__data, ocean)
+        self.assertIsInstance(cm._Colormap__data, LinearSegmentedColormap)
         self.assertEqual(cm.interpolation, "linear")
         self.assertIsNone(cm._vdim)
 
