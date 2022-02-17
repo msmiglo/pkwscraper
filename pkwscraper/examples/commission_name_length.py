@@ -47,7 +47,7 @@ def main():
     ctrl = Controller(
         ("Sejm", 2015), function, colormap, granularity="communes",
         outlines_granularity="voivodships", normalization=True,
-        output_filename="commission_names.png"
+        output_filename="commission_names_length.png"
     )
     ctrl.run()
 

@@ -2,6 +2,7 @@
 import numpy as np
 
 from pkwscraper.lib.controller import Controller
+from pkwscraper.lib.dbdriver import dbdriver
 from pkwscraper.lib.visualizer import Colormap
 
 """
@@ -16,7 +17,13 @@ Color code:
 - base color: the winner in this unit got 50% of votes
 - black: the winner of voting in this unit got 100% of votes
 - intermediate colors indicates the result of voting for winning list
+
+This test also demonstrates the functionality of limiting analysis to
+only one territorial unit.
 """
+
+SEJM_2015_DATA_DIRECTORY = "./pkwscraper/data/sejm/2015/preprocessed/"
+
 
 def function(db):
     # get list number of each candidate
@@ -99,6 +106,7 @@ def main():
     grans = ["communes", "districts", "constituencies", "voivodships"]
     names = ["1comm", "2distr", "3const", "4voivod"]
 
+    # whole country
     for gran, name in zip(grans, names):
         print(f"processing {gran}...")
         out_gran = "voivodships" if gran == "voivodships" else "constituencies"
@@ -108,6 +116,20 @@ def main():
             output_filename=f"winners_{name}.png"
         )
         ctrl_i.run()
+
+    # only mazovian voivodship
+    db = DbDriver(SEJM_2015_DATA_DIRECTORY, read_only=True)
+    mazovian_id = db["województwa"].find_one(
+        {"name": "MAZOWIECKIE"}, fields="_id")
+    for gran, name in zip(grans, names):
+        print(f"processing {gran}...")
+        out_gran = "voivodships" if gran == "voivodships" else "constituencies"
+        ctrl_j = Controller(
+            ("Sejm", 2015), function, colormap, granularity=gran,
+            unit=("voivodships", mazovian_id), outlines_granularity=out_gran,
+            normalization=False, output_filename=f"winners_{name}.png"
+        )
+        ctrl_j.run()
 
 
 if __name__ == "__main__":

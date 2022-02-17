@@ -41,9 +41,10 @@ class Controller:
     to image or for showing in separate window.
     """
     def __init__(self, elections, function, colormap, granularity,
-                outlines_granularity=None, normalization=True,
-                 title=None, show_legend=False, show_grid=False,
-                 output_filename=None, interpolation='linear'):
+                 unit=None, outlines_granularity=None,
+                 normalization=True, title=None, show_legend=False,
+                 show_grid=False, output_filename=None,
+                 interpolation='linear'):
         """
         Constructor does basic checks and creates class attributes.
 
@@ -54,6 +55,11 @@ class Controller:
             values returned by function to proper colors,
         granularity: str - the level of territorial units that plot
             will be split into,
+        unit: (str, ID) or None - the unit to which analysis will be
+            limited; it is the pair of name of granularity, and then
+            the ID of specific unit (that means it has to be determined
+            earlier outside the class); if None - the plot is made for
+            the whole country,
         outlines_granularity - level of territorial units that borders
             will be placed on top of plot as contours,
         normalization: bool - whether or not values from all units

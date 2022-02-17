@@ -3,6 +3,7 @@
 /pkwscraper/data/**/*.xls
 /pkwscraper/data/**/*.xlsx
 /pkwscraper/data/**/*.csv
+/pkwscraper/data/**/*.csv#
 /pkwscraper/data/**/*.htm
 /pkwscraper/data/**/*.html
 /pkwscraper/data/**/*.blob
