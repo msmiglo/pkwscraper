@@ -19,7 +19,7 @@ Concepts dictionary explained:
 """
 
 import matplotlib as mpl
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -161,7 +161,7 @@ class Colormap:
             return self._nd_interpolate(value)
 
         # use matplotlib colormap
-        if isinstance(self.__data, LinearSegmentedColormap):
+        if isinstance(self.__data, (LinearSegmentedColormap, ListedColormap)):
             return self.__data(float(value))
 
         # scalar value
@@ -268,6 +268,11 @@ class Visualizer:
     def normalize_values(self):
         """ Scale values of all individual units to fit desired range. """
         # prepare data
+        ###############################################
+        ###############################################
+        ############### TODO - MAYBE MOVE IT TO INIT (DO ALWAYS)
+        ###############################################
+        ###############################################
         values = np.array(self.values, dtype=float)
         mins = np.amin(values, axis=0)
         maxs = np.amax(values, axis=0)
