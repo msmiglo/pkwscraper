@@ -108,7 +108,7 @@ def main():
           f" {round(100*min_invalid, 1)} % to"
           f" {round(100*max_invalid, 1)} %.")
     print(f"Fraction of them, caused by marking more than"
-          f" 1 candidate range from {round(100*min_multiple, 1)} %"
+          f" 1 candidate, ranges from {round(100*min_multiple, 1)} %"
           f" to {round(100*max_multiple, 1)} %.")
 
 
