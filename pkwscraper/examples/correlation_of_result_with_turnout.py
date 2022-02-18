@@ -86,7 +86,7 @@ def get_whole_country_lists():
     # load source DB
     temp_ctrl = Controller(
         ("Sejm", 2015), None, None, granularity="communes",
-        outlines_granularity="constituencies")
+         outlines_granularity="constituencies")
     temp_ctrl._load_db()
 
     # find list id and constituency for each valid candidate

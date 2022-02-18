@@ -1,0 +1,250 @@
+
+====================
+=== INTRODUCTION ===
+====================
+
+`pkwscraper` may be used in various ways. It is mainly backend package. Whole functionality is provided by `Controller` class. Users can have more control in their analyses by using other public classes. If you only want to know the capabilities of package - run the example scripts.
+
+
+====================
+=== REQUIREMENTS ===
+====================
+
+Recommended versions that where used in development, checked and proved working:
+- Python 3.7.7
+- Windows 10 (for running batch files and DLL for DB engine in future)
+- Python dependencies, described in `requirements.txt` file
+
+All Python releases from 3.7 or later, and Windows XP and later should work. Newer versions of Python dependencies are not checked and guaranteed to work.
+
+
+====================
+=== INSTALATION ====
+====================
+
+Python with its dependancies need to be installed.
+
+Python installation files can be downloaded from the link:
+https://www.python.org/downloads/
+Please follow the proper documentation to install it.
+
+If you want to use separate virtual environment, you can use Virtualenv software, please follow the official documentation to do so:
+https://virtualenv.pypa.io
+
+If you want to use Git version management system, go to official release:
+https://git-scm.com/
+
+You can download the repository using git command:
+`git clone https://github.com/msmiglo/pkwscraper`
+Remember that main repository directory is inside a folder created this way.
+Or you can download it directly from github from link:
+https://github.com/msmiglo/pkwscraper/archive/refs/heads/master.zip
+
+If all is set, you can install dependencies by going to the main directory of repository and run:
+`python -m pip install -r requirements.txt`
+
+If you are using proxy server, there can be needed to setup configuration for `pip` module, check the information under the link:
+https://pip.pypa.io/en/stable/user_guide/#using-a-proxy-server
+
+Everything should be ready to use.
+
+
+====================
+=== USAGE ==========
+====================
+
+    NOTE:
+
+Importing modules and running scripts should be done from the main directory of repository (working directory for Python interpreter). Alternatively one can install the package manually in such way, that it can be reached from directories included in PYTHONPATH or system path (please check details on your own in such case).
+
+
+    RUNNING TESTS AND EXAMPLES
+
+For running batch scripts you need Windows OS. Then just double click on `run_all_tests.bat` or on `run_examples.bat`. The results will be displayed or saved to proper directory in `pkwscraper/data/`
+
+To run tests using Python, type in interpreter:
+`python -m unittest discover`
+which should run all unit tests (and some simple integration tests).
+
+To run single example script, using Python, type:
+`python -m pkwscraper.examples.{name_of_example_script}`
+
+If you want just to download and preprocess data to create local database, you can use one of two methods (this may take several minutes or more):
+a) import proper scraper and preprocessing classes, instantiate and run them,
+b) instantiate the `Controller` without visualization data, and tell it to load DB.
+
+NOTE: do NOT use downloading all data from PKW website frequently, as these are government servers, that are poorly maintained and may be damaged by extensive use... ;)
+
+Here are the example pieces of Python code to do it for 2015 Sejm elections:
+a)
+```
+from pkwscraper.lib.preprocessing.sejm_2015_preprocessing \
+    import Sejm2015Preprocessing
+from pkwscraper.lib.scraper.sejm_2015_scraper \
+    import Sejm2015Scraper
+
+Sejm2015Scraper().run_all()
+Sejm2015Preprocessing().run_all()
+```
+
+b)
+```
+from pkwscraper.lib.controller import Controller
+
+temp_ctrl = Controller(
+    ("Sejm", 2015),
+    None,
+    None,
+    granularity="communes",
+    outlines_granularity="constituencies"
+)
+
+temp_ctrl._load_db()
+```
+
+The second method allows you to use already loaded DB via `temp_ctrl.source_db` attribute.
+
+
+    TERMINOLOGY
+
+Some names and phrases are used with specific meaning in the project. The explanations and dictionaries can be found on corresponding modules docstrings. Check them when using certain classes.
+
+
+    PUBLIC CLASSES AND FUNCTIONS:
+
+For formal and up-to-date documentation of usage of the following classes/functions, check the docstring in the code files.
+
+class `pkwscraper.lib.controller.Controller` - this is the main class of package, which is responsible for choosing right elections configuration, running all stages of data processing, splitting data into territorial units, applying user defined evaluating function to each of them, converting resulting values to colors and plotting proper regions on a plot; if you want to make use of whole functionality of package and not worry too much - use this class; without it, you will need to get familiar with probably all the following classes; the user defined function is applied to an instance of DbDriver which gives access to isolated piece of data corresponding to currently evaluated territorial unit.
+
+class `pkwscraper.lib.visualizer.Visualizer` - it is an important, compound class that is responsible for making a plot; it takes regions, values assigned to them, the colormap and then it is capable of normalizing the values, applying colors to region patches, making the final plot and rendering it to file or to show it in new window.
+
+class `pkwscraper.lib.visualizer.Colormap` - this class gives an alternative to defining colormap as function; it is callable object which takes numerical value/vector of numerical values and maps them to RGB or RGBA colors, which are then used as facecolor for MatPlotLib patches; it can be created in 3 ways:
+- by giving the string name of MatPlotLib defined colormap, which is imported and wrapped,
+- by passing previously self-defined instance of `matplotlib.colors.ListedColormap` or `matplotlib.colors.LinearSegmentedColormap`, which is wrapped,
+- or by providing `color_data` dictionary with dictionary-keys being numerical values/vectors, and the dictionary-values being colors; the object then runs interpolation on given data.
+
+class `pkwscraper.lib.region.Region` - this handles the information about geographical shape of territorial unit; it allows to create object from HTML definition of SVG and to store the shape in JSON format; it also allows to generate MatPlotLib patch object which can be put on plot.
+
+class `pkwscraper.lib.downloader.Downloader` - it allows wrapping internet connection with cache, and handles base URL paths for different elections; this takes control of type of files that are allowed to download and also requires passing only relative path to file.
+
+class `pkwscraper.lib.elections.Elections` - this allows to translate elections identifier (elections_type, elections_year) to proper directiories and classes; this could be useful when automating analysis for different elections.
+
+class  `DbDriver` - custom simple DB engine with poor but acceptable performance; it was created mainly for educational purposes as well as for simplicity and independence of project. You can use it to access `csv` files containing tables with data; it is based on custom query syntax inspired by `MongoDB`, that is presented further in this section; you can use other methods to load and manipulate the `csv` files, like `pandas` library or even write your own parser; knownig its interface and syntax is necessary for using `Controller` class because the user defined function is applied to an instance of `DbDriver`.
+
+function `pkwscraper.lib.utilities.get_parent_code` - each territorial unit has its unique code; this method allows to get the code of parent unit, based on code of children unit.
+
+
+    DB STRUCTURE
+
+The names of tables in the preprocessed DB and its columns are described in `pkwscraper/doc/data_architecture.txt` file. It can be also displayed by running `Controller.show_db_schema()` method.
+
+
+    DBDRIVER QUERY SYNTAX
+
+DbDriver consists of Tables. They are accessed like in the example:
+    db = DbDriver("./path/to/my/db/directory/", read_only=True)
+    table = db["my_table_name"]
+Each table corresponds to one csv file on harddrive.
+
+If you know the ID of a record, that you are looking for, you access it through square brackets; otherwise you need to us `find` method; see example below:
+    my_record = my_table[known_record_id]
+    records_dict = my_table.find(query={"some_column": "my_value"})
+The `my_record` will be just simple dictionary:
+    # my_record == {"number": 5, "some_column": "my_value"}
+`records_dict` will be dictionary with records ID's as dictionary-keys and records themselves as dictionary-values:
+    # records_dict == {known_record_id: my_record}
+Query argument just tells how to find matching records; `query={"some_column": "my_value"}` means: "find all records that own 'some_column' and the value for 'some_column' column is 'my_value'".
+
+When you want to select all records, pass an empty query:
+    all_records_dicts = my_table.find({})
+
+When using `find_one` method, only one record will be returned (first encountered), but when no records match the query - a single `None` object is returned:
+    searched_id, searched_record = table.find_one(query={"some_column": "my_value"})
+    # searched_id == "123456"
+    # searched_record == {"some_number": 5, "some_column": "my_value"}
+    result = table.find_one(query={"some_column": "wrong_value"})
+    # result is None
+
+You don't have to get whole records from `find` and `find_one` methods, you can choose only desired fields to be included in results; when `fields` parameter is passed - the returning value is not a dictionary {_id: record}, but a list of records containing only demanded fields:
+    records = my_table.find(query={}, fields=["_id", "some_column"])
+    # records == [["123456", "my_value"], ["987654", "other_value"]]
+
+if `fields` parameter is not a list, but a single column name, the lists are not nested, but just the values are returned for each record:
+    records = my_table.find(query={}, fields="some_column")
+    # records == ["my_value", "other_value"]
+    records = my_table.find(query={}, fields="_id")
+    # records == ["123456", "987654"]
+
+Note that "_id" column name is reserved for record ID, and cannot be used as a valid column name. If used in `put` method it will be used as record ID (instead of default behaviour which is generating random ID).
+
+The `fields` parameter applies also for `find_one` method - then only one record's fields are returned:
+    record = my_table.find_one(query={}, fields=["_id", "some_column"])
+    # record == ["123456", "my_value"]
+    value = my_table.find_one(query={}, fields="other_column")
+    # value == "other_value"
+
+If some records do not have given column included in `fields` parameter, it will be replaced with `None`:
+    records = my_table.find(query={}, fields=["some_column", "non_existing_column"])
+    # records == [["my_value", None], ["other_value", None]]
+
+if `find_one` method with given `fields` parameter does not find any records matching the query - again - there is a single `None` returned:
+    record = my_table.find(query={"some_column": "wrong_value"}, fields=["_id", "some_column"])
+    # record is None
+
+For documentation on `put` method see the module docstring; it is not commonly used, as it does not apply to read-only databases, which are mainly used during working with this package.
+
+
+    REUSING EXAMPLES
+
+I also encourage you to copy/modify some code and solutions from example scripts in `pkwscraper/examples/`. The example script docstrings contain also some descriptions and explanations of some politics-related analyses, so it can be useful to look at them.
+
+
+====================
+=== CONTRIBUTION ===
+====================
+
+    EXTENDING PROJECT WITH OTHER ELECTIONS
+
+It would be welcome for other developers to implement scrapers and preprocessing for other elections. The base classes/interfaces and common structure of code for all elections is however not well established, so it would need some discussion.
+
+There should be implemented 3 stages of data obtaining:
+- downloading - this step should download data in its raw form from the Internet, using `Downloader` class; for example: *.xlsx files, HTML files or others; zipped archives need to be unpacked;
+- rescribing - this stage rescribes the data from different sources to tables in DB; this step does not include any data cleaning and processing in order to avoid errors;
+- preprocessing - this stage preprocesses data from rescribed tables in DB; it cleans data, ensures that it is complete, repairs some mistakes; the final form of data after this stage must be the same as for other elections of the same type, and must match the structure described in `pkwscraper/doc/data_architecture.txt` file.
+
+Two first stages are joined into one class - scraper, which must implement `pkwscraper.lib.scraper.base_scraper.BaseScraper` class. The last stage must be contained by preprocessing class implementing `pkwscraper.lib.preprocessing.base_preprocessing.BasePreprocessing`. Modules, classes and data directories should follow patterns:
+
+module name (lower case):
+`pkwscraper/lib/scraper/{elections type}_{elections year}_scraper.py`
+`pkwscraper/lib/preprocessing/{elections type}_{elections year}_preprocessing.py`
+
+class names (camel case):
+`{ElectionsType}{ElectionsYear}Scraper`
+`{ElectionsType}{ElectionsYear}Preprocessing`
+
+directories (lower case):
+`pkwscraper/data/{elections type}/{elections year}/raw`
+`pkwscraper/data/{elections type}/{elections year}/rescribed`
+`pkwscraper/data/{elections type}/{elections year}/preprocessed`
+`pkwscraper/data/{elections type}/{elections year}/visualized`
+
+Type of elections must be one of:
+- `sejm`,
+- `senat`,
+- `europarlament`,
+- `prezydent`,
+- `samorząd`,
+- `referendum`.
+
+Year of elections must be an integer of full year (NOT just 2 last digits), for example `2015`.
+
+After adding new elections in this way, there should be also added some configuration to other modules:
+- data directories to `pkwscraper/lib/elections.py`
+- base URL of elections results website to `pkwscraper/lib/downloader.py`
+
+Adding examples of usage of these elections to `pkwscraper/examples` would be appreciated and considered as end-to-end tests for written code.
+
+
+    BUG FIXES, FUNCTIONALITIES, INTRODUCING NEW ISSUES, BUG REPORTING
+
+I have not yet thought about details of collaboration, please contact me :)
