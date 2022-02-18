@@ -11,13 +11,16 @@ This project is related to Data Science (specifically: data engineering). The da
 
 **Project website:** https://github.com/msmiglo/pkwscraper  
 
-Usage manual: https://github.com/msmiglo/pkwscraper/blob/master/pkwscraper/doc/manual.txt
+Usage manual: https://github.com/msmiglo/pkwscraper/blob/master/pkwscraper/doc/manual.txt  
 Wiki page: https://github.com/msmiglo/pkwscraper/wiki  
 Tasks list: https://github.com/msmiglo/pkwscraper/issues  
 Requirements analysis: https://github.com/msmiglo/pkwscraper/wiki#requirements  
 
 **Example visualizations:**  
-[in preparation]
+
+![Sejm 2015 elections result of candidates by gender in communes](/images/Sejm2015male_vs_female_communes.png)
+![Sejm 2015 elections length of commissions names](/images/Sejm2015commission_names_length.png)
+![Sejm 2015 elections winners in Mazovia communes](/images/Sejm2015mazovia_winners_communes.png)
 
 ***
 
@@ -40,5 +43,5 @@ Project is split into 3 parts:
 
 The project includes API for writing custom scripts. That will allow users to visualize other direct results or some self-defined complex expresions on results values. Necessary documentation can be found in repository.
 
-Database structure for preprocessed data: https://github.com/msmiglo/pkwscraper/blob/master/pkwscraper/doc/data_architecture.txt
+Database structure for preprocessed data: https://github.com/msmiglo/pkwscraper/blob/master/pkwscraper/doc/data_architecture.txt  
 DB usage: [`DbDriver` interface](https://github.com/msmiglo/pkwscraper/blob/master/pkwscraper/lib/dbdriver.py#L243), [`Table` interface](https://github.com/msmiglo/pkwscraper/blob/master/pkwscraper/lib/dbdriver.py#L12), [`DbDriver` query syntax](https://github.com/msmiglo/pkwscraper/blob/master/pkwscraper/doc/manual.txt#L142)
