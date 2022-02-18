@@ -47,7 +47,7 @@ class Colormap:
         self.interpolation = interpolation
 
         # matplotlib object
-        if isinstance(color_data, LinearSegmentedColormap):
+        if isinstance(color_data, (LinearSegmentedColormap, ListedColormap)):
             self.__data = color_data
             self._vdim = None
             return
